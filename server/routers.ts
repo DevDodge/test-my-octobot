@@ -1,28 +1,367 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
+import { z } from "zod";
+import { nanoid } from "nanoid";
+import * as db from "./db";
+import axios from "axios";
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
+      return { success: true } as const;
     }),
   }),
 
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  // ============ BOTS ============
+  bots: router({
+    list: adminProcedure.query(async () => {
+      return db.listBots();
+    }),
+    getById: adminProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+      return db.getBotById(input.id);
+    }),
+    create: adminProcedure.input(z.object({
+      name: z.string().min(1),
+      clientName: z.string().min(1),
+      brandLogoUrl: z.string().optional(),
+      flowiseApiUrl: z.string().min(1),
+      flowiseApiKey: z.string().optional(),
+      firstMessage: z.string().optional(),
+    })).mutation(async ({ input, ctx }) => {
+      const id = await db.createBot({ ...input, createdById: ctx.user.id });
+      return { id };
+    }),
+    update: adminProcedure.input(z.object({
+      id: z.number(),
+      name: z.string().min(1).optional(),
+      clientName: z.string().min(1).optional(),
+      brandLogoUrl: z.string().optional(),
+      flowiseApiUrl: z.string().min(1).optional(),
+      flowiseApiKey: z.string().optional(),
+      firstMessage: z.string().optional(),
+      status: z.enum(["active", "paused", "archived"]).optional(),
+    })).mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await db.updateBot(id, data);
+      return { success: true };
+    }),
+    delete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      await db.deleteBot(input.id);
+      return { success: true };
+    }),
+    analytics: adminProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+      return db.getBotAnalytics(input.id);
+    }),
+  }),
+
+  // ============ TEAMS ============
+  teams: router({
+    list: adminProcedure.query(async () => {
+      return db.listTeams();
+    }),
+    create: adminProcedure.input(z.object({ name: z.string().min(1) })).mutation(async ({ input }) => {
+      const id = await db.createTeam(input.name);
+      return { id };
+    }),
+    delete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      await db.deleteTeam(input.id);
+      return { success: true };
+    }),
+    members: router({
+      list: adminProcedure.input(z.object({ teamId: z.number() })).query(async ({ input }) => {
+        return db.listTeamMembers(input.teamId);
+      }),
+      listAll: adminProcedure.query(async () => {
+        return db.listAllTeamMembers();
+      }),
+      add: adminProcedure.input(z.object({ teamId: z.number(), memberName: z.string().min(1) })).mutation(async ({ input }) => {
+        const id = await db.addTeamMember(input.teamId, input.memberName);
+        return { id };
+      }),
+      remove: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+        await db.removeTeamMember(input.id);
+        return { success: true };
+      }),
+    }),
+  }),
+
+  // ============ CLIENT TESTERS ============
+  testers: router({
+    list: adminProcedure.input(z.object({ botId: z.number().optional() }).optional()).query(async ({ input }) => {
+      return db.listClientTesters(input?.botId);
+    }),
+    create: adminProcedure.input(z.object({
+      name: z.string().min(1),
+      email: z.string().optional(),
+      botId: z.number(),
+    })).mutation(async ({ input }) => {
+      const shareToken = nanoid(16);
+      const id = await db.createClientTester({ ...input, shareToken });
+      return { id, shareToken };
+    }),
+    delete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      await db.deleteClientTester(input.id);
+      return { success: true };
+    }),
+    getByToken: publicProcedure.input(z.object({ token: z.string() })).query(async ({ input }) => {
+      const tester = await db.getClientTesterByToken(input.token);
+      if (!tester) return null;
+      const bot = await db.getBotById(tester.botId);
+      return { tester, bot };
+    }),
+  }),
+
+  // ============ TEST SESSIONS ============
+  sessions: router({
+    list: adminProcedure.input(z.object({ botId: z.number().optional(), clientTesterId: z.number().optional() }).optional()).query(async ({ input }) => {
+      return db.listTestSessions(input?.botId, input?.clientTesterId);
+    }),
+    get: adminProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+      const session = await db.getTestSession(input.id);
+      if (!session) return null;
+      const msgs = await db.listMessages(session.id);
+      const feedback = await db.listFeedback(session.id);
+      const note = await db.getSessionNote(session.id);
+      const tester = await db.getClientTesterByToken(""); // We need to get by id
+      return { session, messages: msgs, feedback, note };
+    }),
+    getDetail: adminProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+      const session = await db.getTestSession(input.id);
+      if (!session) return null;
+      const msgs = await db.listMessages(session.id);
+      const feedback = await db.listFeedback(session.id);
+      const note = await db.getSessionNote(session.id);
+      return { session, messages: msgs, feedback, note };
+    }),
+    update: adminProcedure.input(z.object({
+      id: z.number(),
+      status: z.enum(["live", "completed", "reviewed"]).optional(),
+      adminNotes: z.string().optional(),
+      assignedTeamMemberId: z.number().optional(),
+    })).mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await db.updateTestSession(id, data);
+      return { success: true };
+    }),
+    // Client-side: create or get session
+    getOrCreate: publicProcedure.input(z.object({ shareToken: z.string() })).mutation(async ({ input }) => {
+      const tester = await db.getClientTesterByToken(input.shareToken);
+      if (!tester) throw new Error("Invalid share link");
+      const bot = await db.getBotById(tester.botId);
+      if (!bot) throw new Error("Bot not found");
+      // Check for existing live session
+      const existingSessions = await db.listTestSessions(tester.botId, tester.id);
+      const liveSession = existingSessions.find(s => s.status === "live");
+      if (liveSession) {
+        const msgs = await db.listMessages(liveSession.id);
+        const note = await db.getSessionNote(liveSession.id);
+        return { session: liveSession, bot, tester, messages: msgs, note };
+      }
+      // Create new session
+      const sessionToken = nanoid(24);
+      const sessionId = await db.createTestSession({ sessionToken, botId: tester.botId, clientTesterId: tester.id });
+      const newSession = await db.getTestSession(sessionId);
+      return { session: newSession!, bot, tester, messages: [], note: undefined };
+    }),
+    // Client-side: start new session (for re-testing)
+    createNew: publicProcedure.input(z.object({ shareToken: z.string() })).mutation(async ({ input }) => {
+      const tester = await db.getClientTesterByToken(input.shareToken);
+      if (!tester) throw new Error("Invalid share link");
+      const bot = await db.getBotById(tester.botId);
+      if (!bot) throw new Error("Bot not found");
+      const sessionToken = nanoid(24);
+      const sessionId = await db.createTestSession({ sessionToken, botId: tester.botId, clientTesterId: tester.id });
+      const newSession = await db.getTestSession(sessionId);
+      return { session: newSession!, bot, tester, messages: [], note: undefined };
+    }),
+    // Export session as text
+    export: adminProcedure.input(z.object({ id: z.number(), format: z.enum(["txt", "md"]) })).query(async ({ input }) => {
+      const session = await db.getTestSession(input.id);
+      if (!session) throw new Error("Session not found");
+      const msgs = await db.listMessages(session.id);
+      const feedback = await db.listFeedback(session.id);
+      const note = await db.getSessionNote(session.id);
+      const bot = await db.getBotById(session.botId);
+
+      // Build feedback map
+      const feedbackMap = new Map<number, typeof feedback>();
+      feedback.forEach(f => {
+        const existing = feedbackMap.get(f.messageId) || [];
+        existing.push(f);
+        feedbackMap.set(f.messageId, existing);
+      });
+
+      if (input.format === "md") {
+        let md = `# Test Session Report\n\n`;
+        md += `**Bot:** ${bot?.name || "Unknown"}\n`;
+        md += `**Client:** ${bot?.clientName || "Unknown"}\n`;
+        md += `**Session ID:** ${session.sessionToken}\n`;
+        md += `**Status:** ${session.status}\n`;
+        md += `**Created:** ${session.createdAt}\n\n`;
+        md += `## Chat History\n\n`;
+        msgs.forEach(m => {
+          const role = m.role === "user" ? "Client" : "Bot";
+          md += `### ${role} (${m.createdAt})\n\n${m.content}\n\n`;
+          if (m.editedContent) md += `> **Edited Response:** ${m.editedContent}\n\n`;
+          const fb = feedbackMap.get(m.id);
+          if (fb) {
+            fb.forEach(f => {
+              md += `> **${f.feedbackType === "like" ? "👍 Positive" : "👎 Negative"}:** ${f.comment || "No comment"}\n\n`;
+            });
+          }
+        });
+        if (note) md += `## Session Notes\n\n${note.content}\n\n`;
+        if (session.adminNotes) md += `## Admin Notes\n\n${session.adminNotes}\n\n`;
+        if (session.reviewComment) md += `## Review\n\n**Rating:** ${session.reviewRating}/5\n\n${session.reviewComment}\n`;
+        return md;
+      }
+
+      // TXT format
+      let txt = `TEST SESSION REPORT\n${"=".repeat(50)}\n`;
+      txt += `Bot: ${bot?.name || "Unknown"}\n`;
+      txt += `Client: ${bot?.clientName || "Unknown"}\n`;
+      txt += `Session ID: ${session.sessionToken}\n`;
+      txt += `Status: ${session.status}\n`;
+      txt += `Created: ${session.createdAt}\n\n`;
+      txt += `CHAT HISTORY\n${"-".repeat(50)}\n\n`;
+      msgs.forEach(m => {
+        const role = m.role === "user" ? "CLIENT" : "BOT";
+        txt += `[${role}] (${m.createdAt})\n${m.content}\n`;
+        if (m.editedContent) txt += `  [EDITED] ${m.editedContent}\n`;
+        const fb = feedbackMap.get(m.id);
+        if (fb) {
+          fb.forEach(f => {
+            txt += `  [${f.feedbackType.toUpperCase()}] ${f.comment || "No comment"}\n`;
+          });
+        }
+        txt += "\n";
+      });
+      if (note) txt += `SESSION NOTES\n${"-".repeat(50)}\n${note.content}\n\n`;
+      if (session.adminNotes) txt += `ADMIN NOTES\n${"-".repeat(50)}\n${session.adminNotes}\n\n`;
+      if (session.reviewComment) txt += `REVIEW (Rating: ${session.reviewRating}/5)\n${"-".repeat(50)}\n${session.reviewComment}\n`;
+      return txt;
+    }),
+  }),
+
+  // ============ MESSAGES (Client-side) ============
+  messages: router({
+    send: publicProcedure.input(z.object({
+      sessionId: z.number(),
+      content: z.string().min(1),
+      shareToken: z.string(),
+    })).mutation(async ({ input }) => {
+      // Verify the tester owns this session
+      const tester = await db.getClientTesterByToken(input.shareToken);
+      if (!tester) throw new Error("Invalid share link");
+      const session = await db.getTestSession(input.sessionId);
+      if (!session || session.clientTesterId !== tester.id) throw new Error("Unauthorized");
+      const bot = await db.getBotById(session.botId);
+      if (!bot) throw new Error("Bot not found");
+
+      // Save user message
+      const userMsgId = await db.createMessage({ sessionId: input.sessionId, role: "user", content: input.content });
+
+      // Call Flowise API
+      try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (bot.flowiseApiKey) headers["Authorization"] = `Bearer ${bot.flowiseApiKey}`;
+
+        const response = await axios.post(bot.flowiseApiUrl, {
+          question: input.content,
+          overrideConfig: { sessionId: `octobot-${session.sessionToken}` },
+        }, { headers, timeout: 60000 });
+
+        const botReply = response.data?.text || response.data?.message || "No response from agent";
+        const botMsgId = await db.createMessage({ sessionId: input.sessionId, role: "bot", content: botReply });
+
+        return { userMsgId, botMsgId, botReply };
+      } catch (error: any) {
+        const errorMsg = `Error: ${error.message || "Failed to get response from agent"}`;
+        const botMsgId = await db.createMessage({ sessionId: input.sessionId, role: "bot", content: errorMsg });
+        return { userMsgId, botMsgId, botReply: errorMsg };
+      }
+    }),
+    edit: publicProcedure.input(z.object({
+      messageId: z.number(),
+      editedContent: z.string(),
+      shareToken: z.string(),
+    })).mutation(async ({ input }) => {
+      await db.updateMessageEditedContent(input.messageId, input.editedContent);
+      return { success: true };
+    }),
+    feedback: publicProcedure.input(z.object({
+      messageId: z.number(),
+      sessionId: z.number(),
+      feedbackType: z.enum(["like", "dislike"]),
+      comment: z.string().optional(),
+      shareToken: z.string(),
+    })).mutation(async ({ input }) => {
+      const { shareToken, ...data } = input;
+      const id = await db.createFeedback(data);
+      return { id };
+    }),
+  }),
+
+  // ============ NOTES ============
+  notes: router({
+    saveSessionNote: publicProcedure.input(z.object({
+      sessionId: z.number(),
+      content: z.string(),
+      shareToken: z.string(),
+    })).mutation(async ({ input }) => {
+      const id = await db.upsertSessionNote(input.sessionId, input.content);
+      return { id };
+    }),
+    getSessionNote: publicProcedure.input(z.object({ sessionId: z.number() })).query(async ({ input }) => {
+      return db.getSessionNote(input.sessionId);
+    }),
+    // Admin client notes
+    listClientNotes: adminProcedure.input(z.object({ clientTesterId: z.number() })).query(async ({ input }) => {
+      return db.listClientNotes(input.clientTesterId);
+    }),
+    createClientNote: adminProcedure.input(z.object({
+      clientTesterId: z.number(),
+      content: z.string().min(1),
+    })).mutation(async ({ input, ctx }) => {
+      const id = await db.createClientNote({ ...input, createdById: ctx.user.id });
+      return { id };
+    }),
+    deleteClientNote: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      await db.deleteClientNote(input.id);
+      return { success: true };
+    }),
+  }),
+
+  // ============ REVIEWS (Client submit) ============
+  reviews: router({
+    submit: publicProcedure.input(z.object({
+      sessionId: z.number(),
+      rating: z.number().min(1).max(5),
+      comment: z.string().optional(),
+      shareToken: z.string(),
+    })).mutation(async ({ input }) => {
+      await db.updateTestSession(input.sessionId, {
+        reviewSubmitted: true,
+        reviewRating: input.rating,
+        reviewComment: input.comment,
+        status: "completed",
+      });
+      return { success: true };
+    }),
+  }),
+
+  // ============ ANALYTICS ============
+  analytics: router({
+    overview: adminProcedure.query(async () => {
+      return db.getAnalytics();
+    }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

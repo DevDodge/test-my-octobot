@@ -1,11 +1,20 @@
-import { eq } from "drizzle-orm";
+import { eq, desc, and, sql, count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import {
+  InsertUser, users,
+  bots, Bot, InsertBot,
+  teams, teamMembers,
+  clientTesters,
+  testSessions,
+  messages,
+  messageFeedback,
+  sessionNotes,
+  clientNotes,
+} from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -18,26 +27,16 @@ export async function getDb() {
   return _db;
 }
 
+// ============ USER HELPERS ============
 export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) {
-    throw new Error("User openId is required for upsert");
-  }
-
+  if (!user.openId) throw new Error("User openId is required for upsert");
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
-    return;
-  }
-
+  if (!db) { console.warn("[Database] Cannot upsert user: database not available"); return; }
   try {
-    const values: InsertUser = {
-      openId: user.openId,
-    };
+    const values: InsertUser = { openId: user.openId };
     const updateSet: Record<string, unknown> = {};
-
     const textFields = ["name", "email", "loginMethod"] as const;
     type TextField = (typeof textFields)[number];
-
     const assignNullable = (field: TextField) => {
       const value = user[field];
       if (value === undefined) return;
@@ -45,48 +44,288 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values[field] = normalized;
       updateSet[field] = normalized;
     };
-
     textFields.forEach(assignNullable);
-
-    if (user.lastSignedIn !== undefined) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
-    }
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
-    }
-
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = new Date();
-    }
-
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = new Date();
-    }
-
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
-  } catch (error) {
-    console.error("[Database] Failed to upsert user:", error);
-    throw error;
-  }
+    if (user.lastSignedIn !== undefined) { values.lastSignedIn = user.lastSignedIn; updateSet.lastSignedIn = user.lastSignedIn; }
+    if (user.role !== undefined) { values.role = user.role; updateSet.role = user.role; }
+    else if (user.openId === ENV.ownerOpenId) { values.role = 'admin'; updateSet.role = 'admin'; }
+    if (!values.lastSignedIn) values.lastSignedIn = new Date();
+    if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
+    await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  } catch (error) { console.error("[Database] Failed to upsert user:", error); throw error; }
 }
 
 export async function getUserByOpenId(openId: string) {
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
-    return undefined;
-  }
-
+  if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
-
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// ============ BOT HELPERS ============
+export async function createBot(data: { name: string; clientName: string; brandLogoUrl?: string; flowiseApiUrl: string; flowiseApiKey?: string; firstMessage?: string; createdById: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(bots).values(data);
+  return result[0].insertId;
+}
+
+export async function listBots() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(bots).orderBy(desc(bots.createdAt));
+}
+
+export async function getBotById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(bots).where(eq(bots.id, id)).limit(1);
+  return result[0];
+}
+
+export async function updateBot(id: number, data: Partial<{ name: string; clientName: string; brandLogoUrl: string; flowiseApiUrl: string; flowiseApiKey: string; firstMessage: string; status: "active" | "paused" | "archived" }>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(bots).set(data).where(eq(bots.id, id));
+}
+
+export async function deleteBot(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(bots).where(eq(bots.id, id));
+}
+
+// ============ TEAM HELPERS ============
+export async function createTeam(name: string) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(teams).values({ name });
+  return result[0].insertId;
+}
+
+export async function listTeams() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(teams).orderBy(desc(teams.createdAt));
+}
+
+export async function deleteTeam(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(teamMembers).where(eq(teamMembers.teamId, id));
+  await db.delete(teams).where(eq(teams.id, id));
+}
+
+export async function addTeamMember(teamId: number, memberName: string) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(teamMembers).values({ teamId, memberName });
+  return result[0].insertId;
+}
+
+export async function listTeamMembers(teamId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(teamMembers).where(eq(teamMembers.teamId, teamId));
+}
+
+export async function removeTeamMember(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(teamMembers).where(eq(teamMembers.id, id));
+}
+
+export async function listAllTeamMembers() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ id: teamMembers.id, teamId: teamMembers.teamId, memberName: teamMembers.memberName, teamName: teams.name }).from(teamMembers).leftJoin(teams, eq(teamMembers.teamId, teams.id));
+}
+
+// ============ CLIENT TESTER HELPERS ============
+export async function createClientTester(data: { name: string; email?: string; botId: number; shareToken: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(clientTesters).values(data);
+  return result[0].insertId;
+}
+
+export async function listClientTesters(botId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  if (botId) return db.select().from(clientTesters).where(eq(clientTesters.botId, botId)).orderBy(desc(clientTesters.createdAt));
+  return db.select().from(clientTesters).orderBy(desc(clientTesters.createdAt));
+}
+
+export async function getClientTesterByToken(shareToken: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(clientTesters).where(eq(clientTesters.shareToken, shareToken)).limit(1);
+  return result[0];
+}
+
+export async function deleteClientTester(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(clientTesters).where(eq(clientTesters.id, id));
+}
+
+// ============ TEST SESSION HELPERS ============
+export async function createTestSession(data: { sessionToken: string; botId: number; clientTesterId: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(testSessions).values(data);
+  return result[0].insertId;
+}
+
+export async function listTestSessions(botId?: number, clientTesterId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [];
+  if (botId) conditions.push(eq(testSessions.botId, botId));
+  if (clientTesterId) conditions.push(eq(testSessions.clientTesterId, clientTesterId));
+  if (conditions.length > 0) return db.select().from(testSessions).where(and(...conditions)).orderBy(desc(testSessions.createdAt));
+  return db.select().from(testSessions).orderBy(desc(testSessions.createdAt));
+}
+
+export async function getTestSession(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(testSessions).where(eq(testSessions.id, id)).limit(1);
+  return result[0];
+}
+
+export async function getTestSessionByToken(sessionToken: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(testSessions).where(eq(testSessions.sessionToken, sessionToken)).limit(1);
+  return result[0];
+}
+
+export async function updateTestSession(id: number, data: Partial<{ status: "live" | "completed" | "reviewed"; adminNotes: string; reviewSubmitted: boolean; reviewRating: number; reviewComment: string; assignedTeamMemberId: number }>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(testSessions).set(data).where(eq(testSessions.id, id));
+}
+
+// ============ MESSAGE HELPERS ============
+export async function createMessage(data: { sessionId: number; role: "user" | "bot"; content: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(messages).values(data);
+  return result[0].insertId;
+}
+
+export async function listMessages(sessionId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(messages).where(eq(messages.sessionId, sessionId)).orderBy(messages.createdAt);
+}
+
+export async function updateMessageEditedContent(messageId: number, editedContent: string) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(messages).set({ editedContent }).where(eq(messages.id, messageId));
+}
+
+// ============ FEEDBACK HELPERS ============
+export async function createFeedback(data: { messageId: number; sessionId: number; feedbackType: "like" | "dislike"; comment?: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(messageFeedback).values(data);
+  return result[0].insertId;
+}
+
+export async function listFeedback(sessionId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(messageFeedback).where(eq(messageFeedback.sessionId, sessionId));
+}
+
+// ============ SESSION NOTES HELPERS ============
+export async function upsertSessionNote(sessionId: number, content: string) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const existing = await db.select().from(sessionNotes).where(eq(sessionNotes.sessionId, sessionId)).limit(1);
+  if (existing.length > 0) {
+    await db.update(sessionNotes).set({ content }).where(eq(sessionNotes.sessionId, sessionId));
+    return existing[0].id;
+  }
+  const result = await db.insert(sessionNotes).values({ sessionId, content });
+  return result[0].insertId;
+}
+
+export async function getSessionNote(sessionId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(sessionNotes).where(eq(sessionNotes.sessionId, sessionId)).limit(1);
+  return result[0];
+}
+
+// ============ CLIENT NOTES HELPERS ============
+export async function createClientNote(data: { clientTesterId: number; content: string; createdById: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(clientNotes).values(data);
+  return result[0].insertId;
+}
+
+export async function listClientNotes(clientTesterId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(clientNotes).where(eq(clientNotes.clientTesterId, clientTesterId)).orderBy(desc(clientNotes.createdAt));
+}
+
+export async function deleteClientNote(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(clientNotes).where(eq(clientNotes.id, id));
+}
+
+// ============ ANALYTICS HELPERS ============
+export async function getAnalytics() {
+  const db = await getDb();
+  if (!db) return { totalBots: 0, totalTesters: 0, totalSessions: 0, liveSessions: 0, completedSessions: 0, reviewedSessions: 0, totalMessages: 0, totalLikes: 0, totalDislikes: 0 };
+
+  const [botCount] = await db.select({ count: count() }).from(bots);
+  const [testerCount] = await db.select({ count: count() }).from(clientTesters);
+  const [sessionCount] = await db.select({ count: count() }).from(testSessions);
+  const [liveCount] = await db.select({ count: count() }).from(testSessions).where(eq(testSessions.status, "live"));
+  const [completedCount] = await db.select({ count: count() }).from(testSessions).where(eq(testSessions.status, "completed"));
+  const [reviewedCount] = await db.select({ count: count() }).from(testSessions).where(eq(testSessions.status, "reviewed"));
+  const [msgCount] = await db.select({ count: count() }).from(messages);
+  const [likeCount] = await db.select({ count: count() }).from(messageFeedback).where(eq(messageFeedback.feedbackType, "like"));
+  const [dislikeCount] = await db.select({ count: count() }).from(messageFeedback).where(eq(messageFeedback.feedbackType, "dislike"));
+
+  return {
+    totalBots: botCount.count,
+    totalTesters: testerCount.count,
+    totalSessions: sessionCount.count,
+    liveSessions: liveCount.count,
+    completedSessions: completedCount.count,
+    reviewedSessions: reviewedCount.count,
+    totalMessages: msgCount.count,
+    totalLikes: likeCount.count,
+    totalDislikes: dislikeCount.count,
+  };
+}
+
+export async function getBotAnalytics(botId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const [sessionCount] = await db.select({ count: count() }).from(testSessions).where(eq(testSessions.botId, botId));
+  const [liveCount] = await db.select({ count: count() }).from(testSessions).where(and(eq(testSessions.botId, botId), eq(testSessions.status, "live")));
+  const [completedCount] = await db.select({ count: count() }).from(testSessions).where(and(eq(testSessions.botId, botId), eq(testSessions.status, "completed")));
+  const [reviewedCount] = await db.select({ count: count() }).from(testSessions).where(and(eq(testSessions.botId, botId), eq(testSessions.status, "reviewed")));
+
+  // Get avg rating for reviewed sessions
+  const ratings = await db.select({ rating: testSessions.reviewRating }).from(testSessions).where(and(eq(testSessions.botId, botId), eq(testSessions.reviewSubmitted, true)));
+  const validRatings = ratings.filter(r => r.rating !== null).map(r => r.rating!);
+  const avgRating = validRatings.length > 0 ? validRatings.reduce((a, b) => a + b, 0) / validRatings.length : 0;
+
+  return {
+    totalSessions: sessionCount.count,
+    liveSessions: liveCount.count,
+    completedSessions: completedCount.count,
+    reviewedSessions: reviewedCount.count,
+    avgRating: Math.round(avgRating * 10) / 10,
+  };
+}
