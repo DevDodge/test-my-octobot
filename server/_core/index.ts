@@ -2,6 +2,8 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import path from "path";
+import fs from "fs";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
@@ -59,6 +61,11 @@ async function startServer() {
   // Run migration and seed
   await runMigration();
   await seedDefaultAdmin();
+
+  // Serve uploaded files
+  const uploadsDir = path.resolve(process.cwd(), "uploads");
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+  app.use("/uploads", express.static(uploadsDir));
 
   // Auth routes (login endpoint)
   registerOAuthRoutes(app);

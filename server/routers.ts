@@ -6,7 +6,8 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import * as db from "./db";
 import axios from "axios";
-import { storagePut } from "./storage";
+import path from "path";
+import fs from "fs";
 import bcrypt from "bcryptjs";
 
 export const appRouter = router({
@@ -111,10 +112,15 @@ export const appRouter = router({
       filename: z.string(),
       contentType: z.string(),
     })).mutation(async ({ input }) => {
+      const uploadsDir = path.resolve(process.cwd(), "uploads");
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      const safeName = `${nanoid(12)}-${input.filename.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const filePath = path.join(uploadsDir, safeName);
       const buffer = Buffer.from(input.base64, "base64");
-      const key = `uploads/${nanoid(12)}-${input.filename}`;
-      const result = await storagePut(key, buffer, input.contentType);
-      return { url: result.url };
+      fs.writeFileSync(filePath, buffer);
+      return { url: `/uploads/${safeName}` };
     }),
   }),
 
