@@ -1,5 +1,5 @@
 import { eq, desc, and, sql, count } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/node-postgres";
 import {
   InsertUser, users,
   bots, Bot, InsertBot,
@@ -50,7 +50,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     else if (user.openId === ENV.ownerOpenId) { values.role = 'admin'; updateSet.role = 'admin'; }
     if (!values.lastSignedIn) values.lastSignedIn = new Date();
     if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
-    await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+    await db.insert(users).values(values).onConflictDoUpdate({ target: users.openId, set: updateSet });
   } catch (error) { console.error("[Database] Failed to upsert user:", error); throw error; }
 }
 
@@ -65,8 +65,8 @@ export async function getUserByOpenId(openId: string) {
 export async function createBot(data: { name: string; clientName: string; brandLogoUrl?: string; flowiseApiUrl: string; flowiseApiKey?: string; firstMessage?: string; createdById: number }) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(bots).values(data);
-  return result[0].insertId;
+  const result = await db.insert(bots).values(data).returning({ id: bots.id });
+  return result[0].id;
 }
 
 export async function listBots() {
@@ -98,8 +98,8 @@ export async function deleteBot(id: number) {
 export async function createTeam(name: string) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(teams).values({ name });
-  return result[0].insertId;
+  const result = await db.insert(teams).values({ name }).returning({ id: teams.id });
+  return result[0].id;
 }
 
 export async function listTeams() {
@@ -118,8 +118,8 @@ export async function deleteTeam(id: number) {
 export async function addTeamMember(teamId: number, memberName: string) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(teamMembers).values({ teamId, memberName });
-  return result[0].insertId;
+  const result = await db.insert(teamMembers).values({ teamId, memberName }).returning({ id: teamMembers.id });
+  return result[0].id;
 }
 
 export async function listTeamMembers(teamId: number) {
@@ -144,8 +144,8 @@ export async function listAllTeamMembers() {
 export async function createClientTester(data: { name: string; email?: string; botId: number; shareToken: string }) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(clientTesters).values(data);
-  return result[0].insertId;
+  const result = await db.insert(clientTesters).values(data).returning({ id: clientTesters.id });
+  return result[0].id;
 }
 
 export async function listClientTesters(botId?: number) {
@@ -172,8 +172,8 @@ export async function deleteClientTester(id: number) {
 export async function createTestSession(data: { sessionToken: string; botId: number; clientTesterId: number }) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(testSessions).values(data);
-  return result[0].insertId;
+  const result = await db.insert(testSessions).values(data).returning({ id: testSessions.id });
+  return result[0].id;
 }
 
 export async function listTestSessions(botId?: number, clientTesterId?: number) {
@@ -210,8 +210,8 @@ export async function updateTestSession(id: number, data: Partial<{ status: "liv
 export async function createMessage(data: { sessionId: number; role: "user" | "bot"; content: string }) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(messages).values(data);
-  return result[0].insertId;
+  const result = await db.insert(messages).values(data).returning({ id: messages.id });
+  return result[0].id;
 }
 
 export async function listMessages(sessionId: number) {
@@ -230,8 +230,8 @@ export async function updateMessageEditedContent(messageId: number, editedConten
 export async function createFeedback(data: { messageId: number; sessionId: number; feedbackType: "like" | "dislike"; comment?: string }) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(messageFeedback).values(data);
-  return result[0].insertId;
+  const result = await db.insert(messageFeedback).values(data).returning({ id: messageFeedback.id });
+  return result[0].id;
 }
 
 export async function listFeedback(sessionId: number) {
@@ -249,8 +249,8 @@ export async function upsertSessionNote(sessionId: number, content: string) {
     await db.update(sessionNotes).set({ content }).where(eq(sessionNotes.sessionId, sessionId));
     return existing[0].id;
   }
-  const result = await db.insert(sessionNotes).values({ sessionId, content });
-  return result[0].insertId;
+  const result = await db.insert(sessionNotes).values({ sessionId, content }).returning({ id: sessionNotes.id });
+  return result[0].id;
 }
 
 export async function getSessionNote(sessionId: number) {
@@ -264,8 +264,8 @@ export async function getSessionNote(sessionId: number) {
 export async function createClientNote(data: { clientTesterId: number; content: string; createdById: number }) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(clientNotes).values(data);
-  return result[0].insertId;
+  const result = await db.insert(clientNotes).values(data).returning({ id: clientNotes.id });
+  return result[0].id;
 }
 
 export async function listClientNotes(clientTesterId: number) {
