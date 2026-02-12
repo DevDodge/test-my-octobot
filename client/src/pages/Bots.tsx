@@ -20,8 +20,16 @@ const BOT_STATUSES = [
   { value: "cancelled", label: "ملغي", color: "bg-red-100 text-red-700" },
 ] as const;
 
+// Map old status values to new ones for display
+const OLD_STATUS_MAP: Record<string, string> = {
+  active: "live",
+  paused: "not_live",
+  archived: "cancelled",
+};
+
 function getStatusInfo(status: string) {
-  return BOT_STATUSES.find(s => s.value === status) || { value: status, label: status, color: "bg-gray-100 text-gray-600" };
+  const mappedStatus = OLD_STATUS_MAP[status] || status;
+  return BOT_STATUSES.find(s => s.value === mappedStatus) || { value: status, label: status, color: "bg-gray-100 text-gray-600" };
 }
 
 export default function BotsPage() {
@@ -46,14 +54,14 @@ export default function BotsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editBot, setEditBot] = useState<any>(null);
 
-  // Use refs for form fields to avoid re-rendering the Dialog on every keystroke
   const [formName, setFormName] = useState("");
   const [formClientName, setFormClientName] = useState("");
   const [formFlowiseApiUrl, setFormFlowiseApiUrl] = useState("");
   const [formFirstMessage, setFormFirstMessage] = useState("");
   const [formBrandLogoUrl, setFormBrandLogoUrl] = useState("");
   const [uploadingLogo, setUploadingLogo] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const createFileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
 
   // Quick tester creation
   const [quickTesterModal, setQuickTesterModal] = useState<{ botId: number; botName: string } | null>(null);
@@ -85,22 +93,26 @@ export default function BotsPage() {
     }
     setUploadingLogo(true);
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(",")[1];
-        const result = await uploadImage.mutateAsync({
-          base64,
-          filename: file.name,
-          contentType: file.type,
-        });
-        setFormBrandLogoUrl(result.url);
-        toast.success("تم رفع الشعار بنجاح");
-        setUploadingLogo(false);
-      };
-      reader.readAsDataURL(file);
-    } catch {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = () => reject(new Error("Failed to read file"));
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadImage.mutateAsync({
+        base64,
+        filename: file.name,
+        contentType: file.type,
+      });
+      setFormBrandLogoUrl(result.url);
+      toast.success("تم رفع الشعار بنجاح");
+    } catch (err) {
+      console.error("Logo upload failed:", err);
       toast.error("فشل رفع الشعار");
+    } finally {
       setUploadingLogo(false);
+      // Reset the file input so the same file can be selected again
+      e.target.value = "";
     }
   }, [uploadImage]);
 
@@ -158,12 +170,14 @@ export default function BotsPage() {
 
   const getTestersForBot = (botId: number) => testers?.filter(t => t.botId === botId) || [];
 
-  const BotForm = ({ onSubmit, submitLabel }: { onSubmit: () => void; submitLabel: string }) => (
+  // Inline form JSX builder to avoid re-mounting on state changes
+  const renderBotForm = (onSubmit: () => void, submitLabel: string, fileRef: React.RefObject<HTMLInputElement | null>) => (
     <div className="space-y-4" dir="rtl">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <Label>اسم البوت *</Label>
-          <Input
+          <input
+            className="flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm placeholder:text-muted-foreground"
             value={formName}
             onChange={(e) => setFormName(e.target.value)}
             placeholder="بوت الذكاء الاصطناعي"
@@ -171,7 +185,8 @@ export default function BotsPage() {
         </div>
         <div>
           <Label>اسم العميل *</Label>
-          <Input
+          <input
+            className="flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm placeholder:text-muted-foreground"
             value={formClientName}
             onChange={(e) => setFormClientName(e.target.value)}
             placeholder="اسم الشركة"
@@ -180,7 +195,8 @@ export default function BotsPage() {
       </div>
       <div>
         <Label>رابط API *</Label>
-        <Input
+        <input
+          className="flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm placeholder:text-muted-foreground"
           value={formFlowiseApiUrl}
           onChange={(e) => setFormFlowiseApiUrl(e.target.value)}
           placeholder="https://your-api.com/api/v1/prediction/..."
@@ -194,7 +210,7 @@ export default function BotsPage() {
             <img src={formBrandLogoUrl} alt="شعار" className="h-12 w-12 rounded-lg object-cover border" />
           )}
           <input
-            ref={fileInputRef}
+            ref={fileRef}
             type="file"
             accept="image/*"
             className="hidden"
@@ -204,7 +220,7 @@ export default function BotsPage() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => fileRef.current?.click()}
             disabled={uploadingLogo}
           >
             <Upload className="h-4 w-4 ml-1" />
@@ -219,7 +235,8 @@ export default function BotsPage() {
       </div>
       <div>
         <Label>الرسالة الأولى (اختياري)</Label>
-        <Textarea
+        <textarea
+          className="flex field-sizing-content min-h-16 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm placeholder:text-muted-foreground"
           value={formFirstMessage}
           onChange={(e) => setFormFirstMessage(e.target.value)}
           placeholder="مرحباً! كيف يمكنني مساعدتك اليوم؟"
@@ -246,7 +263,7 @@ export default function BotsPage() {
           </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader><DialogTitle>إنشاء بوت جديد</DialogTitle></DialogHeader>
-            <BotForm onSubmit={handleCreate} submitLabel="إنشاء البوت" />
+            {renderBotForm(handleCreate, "إنشاء البوت", createFileInputRef)}
           </DialogContent>
         </Dialog>
       </div>
@@ -265,8 +282,8 @@ export default function BotsPage() {
               الآن أنشئ مختبر لإنشاء رابط اختبار قابل للمشاركة لـ <strong>{createdBotLink?.botName}</strong>:
             </p>
             <div className="space-y-3">
-              <div><Label>اسم المختبر *</Label><Input value={testerName} onChange={(e) => setTesterName(e.target.value)} placeholder="اسم العميل" /></div>
-              <div><Label>البريد الإلكتروني (اختياري)</Label><Input value={testerEmail} onChange={(e) => setTesterEmail(e.target.value)} placeholder="email@example.com" type="email" dir="ltr" /></div>
+              <div><Label>اسم المختبر *</Label><input className="flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm placeholder:text-muted-foreground" value={testerName} onChange={(e) => setTesterName(e.target.value)} placeholder="اسم العميل" /></div>
+              <div><Label>البريد الإلكتروني (اختياري)</Label><input className="flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm placeholder:text-muted-foreground" value={testerEmail} onChange={(e) => setTesterEmail(e.target.value)} placeholder="email@example.com" type="email" dir="ltr" /></div>
             </div>
 
             {newTestLink && (
@@ -390,7 +407,7 @@ export default function BotsPage() {
                       </DialogTrigger>
                       <DialogContent className="max-w-lg">
                         <DialogHeader><DialogTitle>تعديل البوت</DialogTitle></DialogHeader>
-                        <BotForm onSubmit={handleUpdate} submitLabel="حفظ التغييرات" />
+                        {renderBotForm(handleUpdate, "حفظ التغييرات", editFileInputRef)}
                       </DialogContent>
                     </Dialog>
                     <Select value={bot.status} onValueChange={(v) => updateBot.mutate({ id: bot.id, status: v as any })}>
@@ -423,8 +440,8 @@ export default function BotsPage() {
           </DialogHeader>
           <div className="space-y-4" dir="rtl">
             <div className="space-y-3">
-              <div><Label>اسم المختبر *</Label><Input value={testerName} onChange={(e) => setTesterName(e.target.value)} placeholder="اسم العميل" /></div>
-              <div><Label>البريد الإلكتروني (اختياري)</Label><Input value={testerEmail} onChange={(e) => setTesterEmail(e.target.value)} placeholder="email@example.com" type="email" dir="ltr" /></div>
+              <div><Label>اسم المختبر *</Label><input className="flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm placeholder:text-muted-foreground" value={testerName} onChange={(e) => setTesterName(e.target.value)} placeholder="اسم العميل" /></div>
+              <div><Label>البريد الإلكتروني (اختياري)</Label><input className="flex h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm placeholder:text-muted-foreground" value={testerEmail} onChange={(e) => setTesterEmail(e.target.value)} placeholder="email@example.com" type="email" dir="ltr" /></div>
             </div>
 
             {newTestLink && (

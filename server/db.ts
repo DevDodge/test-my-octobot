@@ -139,8 +139,13 @@ export async function seedDefaultAdmin() {
 export async function createBot(data: { name: string; clientName: string; brandLogoUrl?: string; flowiseApiUrl: string; flowiseApiKey?: string; firstMessage?: string; createdById: number }) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(bots).values(data).returning({ id: bots.id });
-  return result[0].id;
+  // Use raw SQL to insert with text cast for status to handle potential enum mismatch
+  const result = await db.execute(sql`
+    INSERT INTO bots ("name", "clientName", "brandLogoUrl", "flowiseApiUrl", "flowiseApiKey", "firstMessage", "status", "createdById", "createdAt", "updatedAt")
+    VALUES (${data.name}, ${data.clientName}, ${data.brandLogoUrl || null}, ${data.flowiseApiUrl}, ${data.flowiseApiKey || null}, ${data.firstMessage || null}, 'testing'::text::bot_status, ${data.createdById}, NOW(), NOW())
+    RETURNING id
+  `);
+  return (result.rows[0] as any).id as number;
 }
 
 export async function listBots() {
@@ -159,7 +164,18 @@ export async function getBotById(id: number) {
 export async function updateBot(id: number, data: Partial<{ name: string; clientName: string; brandLogoUrl: string; flowiseApiUrl: string; flowiseApiKey: string; firstMessage: string; status: "in_review" | "testing" | "live" | "not_live" | "cancelled" }>) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.update(bots).set(data).where(eq(bots.id, id));
+  // If status is being updated, use raw SQL to cast the value as text first to avoid enum mismatch
+  if (data.status) {
+    const { status, ...rest } = data;
+    // Update status separately using raw SQL to handle potential enum mismatch
+    await db.execute(sql`UPDATE bots SET status = ${status}::text::bot_status WHERE id = ${id}`);
+    // Update remaining fields if any
+    if (Object.keys(rest).length > 0) {
+      await db.update(bots).set(rest).where(eq(bots.id, id));
+    }
+  } else {
+    await db.update(bots).set(data).where(eq(bots.id, id));
+  }
 }
 
 export async function deleteBot(id: number) {
@@ -394,46 +410,71 @@ export async function deleteClientNote(id: number) {
 // ============ ANALYTICS HELPERS ============
 export async function getAnalytics() {
   const db = await getDb();
-  if (!db) return {
+  const defaultResult = {
     totalBots: 0, totalTesters: 0, totalSessions: 0,
     liveSessions: 0, completedSessions: 0, reviewedSessions: 0,
     totalMessages: 0, totalLikes: 0, totalDislikes: 0,
     botsInReview: 0, botsTesting: 0, botsLive: 0, botsNotLive: 0, botsCancelled: 0,
   };
+  if (!db) return defaultResult;
 
-  const [botCount] = await db.select({ count: count() }).from(bots);
-  const [testerCount] = await db.select({ count: count() }).from(clientTesters);
-  const [sessionCount] = await db.select({ count: count() }).from(testSessions);
-  const [liveCount] = await db.select({ count: count() }).from(testSessions).where(eq(testSessions.status, "live"));
-  const [completedCount] = await db.select({ count: count() }).from(testSessions).where(eq(testSessions.status, "completed"));
-  const [reviewedCount] = await db.select({ count: count() }).from(testSessions).where(eq(testSessions.status, "reviewed"));
-  const [msgCount] = await db.select({ count: count() }).from(messages);
-  const [likeCount] = await db.select({ count: count() }).from(messageFeedback).where(eq(messageFeedback.feedbackType, "like"));
-  const [dislikeCount] = await db.select({ count: count() }).from(messageFeedback).where(eq(messageFeedback.feedbackType, "dislike"));
+  try {
+    const [botCount] = await db.select({ count: count() }).from(bots);
+    const [testerCount] = await db.select({ count: count() }).from(clientTesters);
+    const [sessionCount] = await db.select({ count: count() }).from(testSessions);
+    const [liveCount] = await db.select({ count: count() }).from(testSessions).where(eq(testSessions.status, "live"));
+    const [completedCount] = await db.select({ count: count() }).from(testSessions).where(eq(testSessions.status, "completed"));
+    const [reviewedCount] = await db.select({ count: count() }).from(testSessions).where(eq(testSessions.status, "reviewed"));
+    const [msgCount] = await db.select({ count: count() }).from(messages);
+    const [likeCount] = await db.select({ count: count() }).from(messageFeedback).where(eq(messageFeedback.feedbackType, "like"));
+    const [dislikeCount] = await db.select({ count: count() }).from(messageFeedback).where(eq(messageFeedback.feedbackType, "dislike"));
 
-  // Bot status counts
-  const [inReviewCount] = await db.select({ count: count() }).from(bots).where(eq(bots.status, "in_review"));
-  const [testingCount] = await db.select({ count: count() }).from(bots).where(eq(bots.status, "testing"));
-  const [botsLiveCount] = await db.select({ count: count() }).from(bots).where(eq(bots.status, "live"));
-  const [notLiveCount] = await db.select({ count: count() }).from(bots).where(eq(bots.status, "not_live"));
-  const [cancelledCount] = await db.select({ count: count() }).from(bots).where(eq(bots.status, "cancelled"));
+    // Bot status counts - use raw SQL with text cast to handle both old and new enum values gracefully
+    let botsInReview = 0, botsTesting = 0, botsLive = 0, botsNotLive = 0, botsCancelled = 0;
+    try {
+      const statusCounts = await db.execute(sql`
+        SELECT status::text as status_val, COUNT(*)::int as cnt
+        FROM bots
+        GROUP BY status::text
+      `);
+      for (const row of statusCounts.rows) {
+        const statusVal = (row as any).status_val;
+        const cnt = Number((row as any).cnt) || 0;
+        switch (statusVal) {
+          case 'in_review': botsInReview = cnt; break;
+          case 'testing': botsTesting = cnt; break;
+          case 'live': botsLive = cnt; break;
+          case 'active': botsLive += cnt; break; // map old 'active' to 'live'
+          case 'not_live': botsNotLive = cnt; break;
+          case 'paused': botsNotLive += cnt; break; // map old 'paused' to 'not_live'
+          case 'cancelled': botsCancelled = cnt; break;
+          case 'archived': botsCancelled += cnt; break; // map old 'archived' to 'cancelled'
+        }
+      }
+    } catch (statusErr) {
+      console.warn("[Analytics] Failed to get bot status counts:", statusErr);
+    }
 
-  return {
-    totalBots: botCount.count,
-    totalTesters: testerCount.count,
-    totalSessions: sessionCount.count,
-    liveSessions: liveCount.count,
-    completedSessions: completedCount.count,
-    reviewedSessions: reviewedCount.count,
-    totalMessages: msgCount.count,
-    totalLikes: likeCount.count,
-    totalDislikes: dislikeCount.count,
-    botsInReview: inReviewCount.count,
-    botsTesting: testingCount.count,
-    botsLive: botsLiveCount.count,
-    botsNotLive: notLiveCount.count,
-    botsCancelled: cancelledCount.count,
-  };
+    return {
+      totalBots: botCount.count,
+      totalTesters: testerCount.count,
+      totalSessions: sessionCount.count,
+      liveSessions: liveCount.count,
+      completedSessions: completedCount.count,
+      reviewedSessions: reviewedCount.count,
+      totalMessages: msgCount.count,
+      totalLikes: likeCount.count,
+      totalDislikes: dislikeCount.count,
+      botsInReview,
+      botsTesting,
+      botsLive,
+      botsNotLive,
+      botsCancelled,
+    };
+  } catch (err) {
+    console.error("[Analytics] Failed to get analytics:", err);
+    return defaultResult;
+  }
 }
 
 export async function getBotAnalytics(botId: number) {
