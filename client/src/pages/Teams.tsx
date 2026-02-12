@@ -12,10 +12,10 @@ import { toast } from "sonner";
 export default function TeamsPage() {
   const utils = trpc.useUtils();
   const { data: teams, isLoading } = trpc.teams.list.useQuery();
-  const createTeam = trpc.teams.create.useMutation({ onSuccess: () => { utils.teams.list.invalidate(); toast.success("Team created"); } });
-  const deleteTeam = trpc.teams.delete.useMutation({ onSuccess: () => { utils.teams.list.invalidate(); toast.success("Team deleted"); } });
-  const addMember = trpc.teams.members.add.useMutation({ onSuccess: () => { utils.teams.list.invalidate(); setExpandedTeam(null); toast.success("Member added"); } });
-  const removeMember = trpc.teams.members.remove.useMutation({ onSuccess: () => { utils.teams.list.invalidate(); toast.success("Member removed"); } });
+  const createTeam = trpc.teams.create.useMutation({ onSuccess: () => { utils.teams.list.invalidate(); toast.success("تم إنشاء الفريق"); } });
+  const deleteTeam = trpc.teams.delete.useMutation({ onSuccess: () => { utils.teams.list.invalidate(); toast.success("تم حذف الفريق"); } });
+  const addMember = trpc.teams.members.add.useMutation({ onSuccess: () => { utils.teams.list.invalidate(); setExpandedTeam(null); toast.success("تمت إضافة العضو"); } });
+  const removeMember = trpc.teams.members.remove.useMutation({ onSuccess: () => { utils.teams.list.invalidate(); toast.success("تمت إزالة العضو"); } });
 
   const [createOpen, setCreateOpen] = useState(false);
   const [teamName, setTeamName] = useState("");
@@ -23,30 +23,30 @@ export default function TeamsPage() {
   const [memberName, setMemberName] = useState("");
 
   const handleCreate = () => {
-    if (!teamName) { toast.error("Team name is required"); return; }
+    if (!teamName) { toast.error("اسم الفريق مطلوب"); return; }
     createTeam.mutate({ name: teamName });
     setCreateOpen(false);
     setTeamName("");
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" dir="rtl">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Teams</h1>
-          <p className="text-muted-foreground mt-1">Organize your testers into teams</p>
+          <h1 className="text-2xl font-bold tracking-tight">الفرق</h1>
+          <p className="text-muted-foreground mt-1">تنظيم المختبرين في فرق عمل</p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 mr-2" />Create Team</Button>
+            <Button><Plus className="h-4 w-4 ml-2" />إنشاء فريق</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Create New Team</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div><Label>Team Name</Label><Input value={teamName} onChange={(e) => setTeamName(e.target.value)} placeholder="QA Team" /></div>
+            <DialogHeader><DialogTitle>إنشاء فريق جديد</DialogTitle></DialogHeader>
+            <div className="space-y-4" dir="rtl">
+              <div><Label>اسم الفريق</Label><Input value={teamName} onChange={(e) => setTeamName(e.target.value)} placeholder="فريق ضمان الجودة" /></div>
               <DialogFooter>
-                <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-                <Button onClick={handleCreate} disabled={createTeam.isPending}>Create</Button>
+                <DialogClose asChild><Button variant="outline">إلغاء</Button></DialogClose>
+                <Button onClick={handleCreate} disabled={createTeam.isPending}>إنشاء</Button>
               </DialogFooter>
             </div>
           </DialogContent>
@@ -60,8 +60,8 @@ export default function TeamsPage() {
       ) : !teams?.length ? (
         <Card><CardContent className="flex flex-col items-center justify-center py-12 text-center">
           <UsersRound className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium">No teams yet</h3>
-          <p className="text-muted-foreground mt-1">Create teams to organize your testing workflow</p>
+          <h3 className="text-lg font-medium">لا توجد فرق بعد</h3>
+          <p className="text-muted-foreground mt-1">أنشئ فرقاً لتنظيم سير عمل الاختبار</p>
         </CardContent></Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -79,7 +79,7 @@ export default function TeamsPage() {
                 setMemberName("");
               }}
               onRemoveMember={(id: number) => removeMember.mutate({ id })}
-              onDelete={() => { if (confirm("Delete this team and all members?")) deleteTeam.mutate({ id: team.id }); }}
+              onDelete={() => { if (confirm("هل تريد حذف هذا الفريق وجميع أعضائه؟")) deleteTeam.mutate({ id: team.id }); }}
               addingMember={addMember.isPending}
             />
           ))}
@@ -101,7 +101,7 @@ function TeamCard({ team, isExpanded, onToggle, memberName, setMemberName, onAdd
           </div>
           <div>
             <CardTitle className="text-base">{team.name}</CardTitle>
-            <p className="text-sm text-muted-foreground">{members?.length || 0} members</p>
+            <p className="text-sm text-muted-foreground">{members?.length || 0} أعضاء</p>
           </div>
         </div>
         <div className="flex gap-1">
@@ -117,9 +117,9 @@ function TeamCard({ team, isExpanded, onToggle, memberName, setMemberName, onAdd
         {members && members.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {members.map((m: any) => (
-              <Badge key={m.id} variant="secondary" className="gap-1 pr-1">
+              <Badge key={m.id} variant="secondary" className="gap-1 pl-1">
                 {m.memberName}
-                <button onClick={() => onRemoveMember(m.id)} className="ml-1 hover:text-destructive">
+                <button onClick={() => onRemoveMember(m.id)} className="mr-1 hover:text-destructive">
                   <Trash2 className="h-3 w-3" />
                 </button>
               </Badge>
@@ -128,8 +128,8 @@ function TeamCard({ team, isExpanded, onToggle, memberName, setMemberName, onAdd
         )}
         {isExpanded && (
           <div className="flex gap-2 pt-2">
-            <Input value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="Member name" className="flex-1" onKeyDown={(e) => e.key === "Enter" && onAddMember()} />
-            <Button size="sm" onClick={onAddMember} disabled={addingMember}>Add</Button>
+            <Input value={memberName} onChange={(e) => setMemberName(e.target.value)} placeholder="اسم العضو" className="flex-1" onKeyDown={(e) => e.key === "Enter" && onAddMember()} />
+            <Button size="sm" onClick={onAddMember} disabled={addingMember}>إضافة</Button>
           </div>
         )}
       </CardContent>

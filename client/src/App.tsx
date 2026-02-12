@@ -12,6 +12,7 @@ import TeamsPage from "./pages/Teams";
 import SessionsPage from "./pages/Sessions";
 import SessionDetailPage from "./pages/SessionDetail";
 import AnalyticsPage from "./pages/Analytics";
+import BannersPage from "./pages/Banners";
 import ClientChat from "./pages/ClientChat";
 
 function AdminRoutes() {
@@ -24,6 +25,7 @@ function AdminRoutes() {
         <Route path="/teams" component={TeamsPage} />
         <Route path="/sessions" component={SessionsPage} />
         <Route path="/sessions/:id" component={SessionDetailPage} />
+        <Route path="/banners" component={BannersPage} />
         <Route path="/analytics" component={AnalyticsPage} />
         <Route component={NotFound} />
       </Switch>

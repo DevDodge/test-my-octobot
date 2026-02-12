@@ -4,20 +4,31 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ClipboardList, Eye, Download } from "lucide-react";
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { ClipboardList, Eye } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useLocation, useSearch } from "wouter";
 
 export default function SessionsPage() {
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
   const { data: sessions, isLoading } = trpc.sessions.list.useQuery();
   const { data: bots } = trpc.bots.list.useQuery();
   const { data: testers } = trpc.testers.list.useQuery();
-  const [filterBot, setFilterBot] = useState<string>("all");
+
+  // Parse botId from query params
+  const urlParams = new URLSearchParams(searchString);
+  const initialBotFilter = urlParams.get("botId") || "all";
+  const [filterBot, setFilterBot] = useState<string>(initialBotFilter);
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const botId = params.get("botId");
+    if (botId) setFilterBot(botId);
+  }, [searchString]);
 
   const filteredSessions = filterBot === "all" ? sessions : sessions?.filter((s) => s.botId === parseInt(filterBot));
-  const getBotName = (botId: number) => bots?.find((b) => b.id === botId)?.name || "Unknown";
-  const getTesterName = (testerId: number) => testers?.find((t) => t.id === testerId)?.name || "Unknown";
+  const getBotName = (botId: number) => bots?.find((b) => b.id === botId)?.name || "غير معروف";
+  const getTesterName = (testerId: number) => testers?.find((t) => t.id === testerId)?.name || "غير معروف";
 
   const statusColor = (s: string) => {
     if (s === "live") return "bg-green-100 text-green-700";
@@ -25,17 +36,23 @@ export default function SessionsPage() {
     return "bg-purple-100 text-purple-700";
   };
 
+  const statusLabel = (s: string) => {
+    if (s === "live") return "مباشر";
+    if (s === "completed") return "مكتمل";
+    return "تمت المراجعة";
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" dir="rtl">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Test Sessions</h1>
-          <p className="text-muted-foreground mt-1">View and manage all test sessions</p>
+          <h1 className="text-2xl font-bold tracking-tight">جلسات الاختبار</h1>
+          <p className="text-muted-foreground mt-1">عرض وإدارة جميع جلسات الاختبار</p>
         </div>
         <Select value={filterBot} onValueChange={setFilterBot}>
-          <SelectTrigger className="w-48"><SelectValue placeholder="Filter by bot" /></SelectTrigger>
+          <SelectTrigger className="w-48"><SelectValue placeholder="تصفية حسب البوت" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Bots</SelectItem>
+            <SelectItem value="all">جميع البوتات</SelectItem>
             {bots?.map((bot) => (
               <SelectItem key={bot.id} value={bot.id.toString()}>{bot.name}</SelectItem>
             ))}
@@ -48,8 +65,8 @@ export default function SessionsPage() {
       ) : !filteredSessions?.length ? (
         <Card><CardContent className="flex flex-col items-center justify-center py-12 text-center">
           <ClipboardList className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium">No sessions yet</h3>
-          <p className="text-muted-foreground mt-1">Sessions will appear when testers start chatting</p>
+          <h3 className="text-lg font-medium">لا توجد جلسات بعد</h3>
+          <p className="text-muted-foreground mt-1">ستظهر الجلسات عندما يبدأ المختبرون بالمحادثة</p>
         </CardContent></Card>
       ) : (
         <Card>
@@ -57,12 +74,12 @@ export default function SessionsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Bot</TableHead>
-                  <TableHead>Tester</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="hidden sm:table-cell">Rating</TableHead>
-                  <TableHead className="hidden sm:table-cell">Created</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
+                  <TableHead>البوت</TableHead>
+                  <TableHead>المختبر</TableHead>
+                  <TableHead>الحالة</TableHead>
+                  <TableHead className="hidden sm:table-cell">التقييم</TableHead>
+                  <TableHead className="hidden sm:table-cell">تاريخ الإنشاء</TableHead>
+                  <TableHead className="w-24">الإجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -70,16 +87,16 @@ export default function SessionsPage() {
                   <TableRow key={session.id}>
                     <TableCell className="font-medium">{getBotName(session.botId)}</TableCell>
                     <TableCell>{getTesterName(session.clientTesterId)}</TableCell>
-                    <TableCell><Badge className={statusColor(session.status)}>{session.status}</Badge></TableCell>
+                    <TableCell><Badge className={statusColor(session.status)}>{statusLabel(session.status)}</Badge></TableCell>
                     <TableCell className="hidden sm:table-cell">
                       {session.reviewRating ? `${session.reviewRating}/5` : "-"}
                     </TableCell>
                     <TableCell className="hidden sm:table-cell text-muted-foreground text-sm">
-                      {new Date(session.createdAt).toLocaleDateString()}
+                      {new Date(session.createdAt).toLocaleDateString("ar-EG")}
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => setLocation(`/sessions/${session.id}`)} title="View details">
+                        <Button variant="ghost" size="sm" onClick={() => setLocation(`/sessions/${session.id}`)} title="عرض التفاصيل">
                           <Eye className="h-3 w-3" />
                         </Button>
                       </div>

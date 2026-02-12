@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, Bot, Users, UsersRound, ClipboardList, BarChart3, LogOut, PanelLeft } from "lucide-react";
+import { LayoutDashboard, Bot, Users, UsersRound, ClipboardList, BarChart3, LogOut, PanelLeft, Megaphone } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -30,12 +30,13 @@ import { Button } from "./ui/button";
 const LOGO_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663346430490/lltjiETQWNdEtrRM.svg";
 
 const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Bot, label: "Bots", path: "/bots" },
-  { icon: Users, label: "Testers", path: "/testers" },
-  { icon: UsersRound, label: "Teams", path: "/teams" },
-  { icon: ClipboardList, label: "Sessions", path: "/sessions" },
-  { icon: BarChart3, label: "Analytics", path: "/analytics" },
+  { icon: LayoutDashboard, label: "لوحة التحكم", path: "/" },
+  { icon: Bot, label: "البوتات", path: "/bots" },
+  { icon: Users, label: "المختبرون", path: "/testers" },
+  { icon: UsersRound, label: "الفرق", path: "/teams" },
+  { icon: ClipboardList, label: "الجلسات", path: "/sessions" },
+  { icon: Megaphone, label: "البانرات", path: "/banners" },
+  { icon: BarChart3, label: "التحليلات", path: "/analytics" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -64,23 +65,26 @@ export default function DashboardLayout({
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
+      <div className="flex items-center justify-center min-h-screen bg-background" dir="rtl">
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <img src={LOGO_URL} alt="DK-OctoBot" className="h-24 w-24" />
           <div className="flex flex-col items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight text-center text-foreground">
-              DK-OctoBot Admin
+              لوحة تحكم DK-OctoBot
             </h1>
             <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Sign in to manage your AI bot testing platform.
+              سجّل الدخول لإدارة منصة اختبار بوتات الذكاء الاصطناعي.
             </p>
+            <a href="https://octobot.it.com" target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+              octobot.it.com
+            </a>
           </div>
           <Button
             onClick={() => { window.location.href = getLoginUrl(); }}
             size="lg"
             className="w-full shadow-lg hover:shadow-xl transition-all"
           >
-            Sign in
+            تسجيل الدخول
           </Button>
         </div>
       </div>
@@ -89,12 +93,12 @@ export default function DashboardLayout({
 
   if (user.role !== "admin") {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
+      <div className="flex items-center justify-center min-h-screen bg-background" dir="rtl">
         <div className="flex flex-col items-center gap-6 p-8 max-w-md w-full">
           <img src={LOGO_URL} alt="DK-OctoBot" className="h-20 w-20" />
-          <h1 className="text-xl font-semibold text-foreground">Access Denied</h1>
+          <h1 className="text-xl font-semibold text-foreground">الوصول مرفوض</h1>
           <p className="text-sm text-muted-foreground text-center">
-            You need admin privileges to access this dashboard.
+            تحتاج إلى صلاحيات المسؤول للوصول إلى لوحة التحكم.
           </p>
         </div>
       </div>
@@ -162,7 +166,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
               <button
                 onClick={toggleSidebar}
                 className="h-8 w-8 flex items-center justify-center hover:bg-sidebar-accent rounded-lg transition-colors focus:outline-none shrink-0"
-                aria-label="Toggle navigation"
+                aria-label="تبديل القائمة"
               >
                 {isCollapsed ? (
                   <img src={LOGO_URL} alt="DK" className="h-6 w-6" />
@@ -171,12 +175,12 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
                 )}
               </button>
               {!isCollapsed && (
-                <div className="flex items-center gap-2 min-w-0">
+                <a href="https://octobot.it.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity">
                   <img src={LOGO_URL} alt="DK-OctoBot" className="h-7 w-7" />
                   <span className="font-bold tracking-tight truncate text-sidebar-foreground text-sm">
                     DK-OctoBot
                   </span>
-                </div>
+                </a>
               )}
             </div>
           </SidebarHeader>
@@ -223,8 +227,8 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:text-destructive">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sign out</span>
+                  <LogOut className="ml-2 h-4 w-4" />
+                  <span>تسجيل الخروج</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -242,10 +246,12 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
           <div className="flex border-b h-14 items-center justify-between bg-background/95 px-3 backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
-              <img src={LOGO_URL} alt="DK" className="h-6 w-6" />
-              <span className="tracking-tight text-foreground font-medium text-sm">
-                {activeMenuItem?.label ?? "Menu"}
-              </span>
+              <a href="https://octobot.it.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
+                <img src={LOGO_URL} alt="DK" className="h-6 w-6" />
+                <span className="tracking-tight text-foreground font-medium text-sm">
+                  {activeMenuItem?.label ?? "القائمة"}
+                </span>
+              </a>
             </div>
           </div>
         )}

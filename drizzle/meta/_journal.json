@@ -8,6 +8,13 @@
       "when": 1770858395846,
       "tag": "0000_ordinary_blazing_skull",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1770944800000,
+      "tag": "0001_update_statuses_and_banners",
+      "breakpoints": true
     }
   ]
 }

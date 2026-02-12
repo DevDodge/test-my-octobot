@@ -19,16 +19,16 @@ export default function TestersPage() {
       utils.testers.list.invalidate();
       const link = `${window.location.origin}/chat/${data.shareToken}`;
       navigator.clipboard.writeText(link);
-      toast.success("Tester created! Share link copied to clipboard.");
+      toast.success("تم إنشاء المختبر! تم نسخ رابط المشاركة.");
     },
   });
-  const deleteTester = trpc.testers.delete.useMutation({ onSuccess: () => { utils.testers.list.invalidate(); toast.success("Tester removed"); } });
+  const deleteTester = trpc.testers.delete.useMutation({ onSuccess: () => { utils.testers.list.invalidate(); toast.success("تمت إزالة المختبر"); } });
 
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", botId: "" });
 
   const handleCreate = () => {
-    if (!form.name || !form.botId) { toast.error("Name and bot are required"); return; }
+    if (!form.name || !form.botId) { toast.error("الاسم والبوت مطلوبان"); return; }
     createTester.mutate({ name: form.name, email: form.email || undefined, botId: parseInt(form.botId) });
     setCreateOpen(false);
     setForm({ name: "", email: "", botId: "" });
@@ -36,41 +36,41 @@ export default function TestersPage() {
 
   const copyLink = (token: string) => {
     navigator.clipboard.writeText(`${window.location.origin}/chat/${token}`);
-    toast.success("Share link copied!");
+    toast.success("تم نسخ رابط المشاركة!");
   };
 
-  const getBotName = (botId: number) => bots?.find((b) => b.id === botId)?.name || "Unknown";
+  const getBotName = (botId: number) => bots?.find((b) => b.id === botId)?.name || "غير معروف";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" dir="rtl">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Testers</h1>
-          <p className="text-muted-foreground mt-1">Manage client testers and their bot assignments</p>
+          <h1 className="text-2xl font-bold tracking-tight">المختبرون</h1>
+          <p className="text-muted-foreground mt-1">إدارة المختبرين وتعيينهم للبوتات</p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
-            <Button><Plus className="h-4 w-4 mr-2" />Add Tester</Button>
+            <Button><Plus className="h-4 w-4 ml-2" />إضافة مختبر</Button>
           </DialogTrigger>
           <DialogContent>
-            <DialogHeader><DialogTitle>Add New Tester</DialogTitle></DialogHeader>
-            <div className="space-y-4">
-              <div><Label>Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Tester name" /></div>
-              <div><Label>Email (optional)</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@example.com" type="email" /></div>
+            <DialogHeader><DialogTitle>إضافة مختبر جديد</DialogTitle></DialogHeader>
+            <div className="space-y-4" dir="rtl">
+              <div><Label>الاسم *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="اسم المختبر" /></div>
+              <div><Label>البريد الإلكتروني (اختياري)</Label><Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@example.com" type="email" dir="ltr" /></div>
               <div>
-                <Label>Assign Bot *</Label>
+                <Label>تعيين البوت *</Label>
                 <Select value={form.botId} onValueChange={(v) => setForm({ ...form, botId: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select a bot" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="اختر بوت" /></SelectTrigger>
                   <SelectContent>
-                    {bots?.filter(b => b.status === "active").map((bot) => (
+                    {bots?.filter(b => b.status === "live" || b.status === "testing").map((bot) => (
                       <SelectItem key={bot.id} value={bot.id.toString()}>{bot.name} ({bot.clientName})</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <DialogFooter>
-                <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-                <Button onClick={handleCreate} disabled={createTester.isPending}>Add Tester</Button>
+                <DialogClose asChild><Button variant="outline">إلغاء</Button></DialogClose>
+                <Button onClick={handleCreate} disabled={createTester.isPending}>إضافة المختبر</Button>
               </DialogFooter>
             </div>
           </DialogContent>
@@ -82,8 +82,8 @@ export default function TestersPage() {
       ) : !testers?.length ? (
         <Card><CardContent className="flex flex-col items-center justify-center py-12 text-center">
           <Users className="h-12 w-12 text-muted-foreground mb-4" />
-          <h3 className="text-lg font-medium">No testers yet</h3>
-          <p className="text-muted-foreground mt-1">Add testers and assign them to bots</p>
+          <h3 className="text-lg font-medium">لا يوجد مختبرون بعد</h3>
+          <p className="text-muted-foreground mt-1">أضف مختبرين وعيّنهم للبوتات</p>
         </CardContent></Card>
       ) : (
         <Card>
@@ -91,10 +91,10 @@ export default function TestersPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead className="hidden sm:table-cell">Email</TableHead>
-                  <TableHead>Bot</TableHead>
-                  <TableHead>Share Link</TableHead>
+                  <TableHead>الاسم</TableHead>
+                  <TableHead className="hidden sm:table-cell">البريد الإلكتروني</TableHead>
+                  <TableHead>البوت</TableHead>
+                  <TableHead>رابط المشاركة</TableHead>
                   <TableHead className="w-12"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -106,10 +106,10 @@ export default function TestersPage() {
                     <TableCell>{getBotName(tester.botId)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => copyLink(tester.shareToken)} title="Copy share link">
-                          <Copy className="h-3 w-3 mr-1" />Copy
+                        <Button variant="ghost" size="sm" onClick={() => copyLink(tester.shareToken)} title="نسخ رابط المشاركة">
+                          <Copy className="h-3 w-3 ml-1" />نسخ
                         </Button>
-                        <Button variant="ghost" size="sm" asChild title="Open chat">
+                        <Button variant="ghost" size="sm" asChild title="فتح المحادثة">
                           <a href={`/chat/${tester.shareToken}`} target="_blank" rel="noopener noreferrer">
                             <ExternalLink className="h-3 w-3" />
                           </a>
@@ -117,7 +117,7 @@ export default function TestersPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { if (confirm("Remove this tester?")) deleteTester.mutate({ id: tester.id }); }}>
+                      <Button variant="ghost" size="sm" className="text-destructive" onClick={() => { if (confirm("هل تريد إزالة هذا المختبر؟")) deleteTester.mutate({ id: tester.id }); }}>
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </TableCell>

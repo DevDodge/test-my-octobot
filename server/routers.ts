@@ -6,6 +6,7 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import * as db from "./db";
 import axios from "axios";
+import { storagePut } from "./storage";
 
 export const appRouter = router({
   system: systemRouter,
@@ -31,7 +32,6 @@ export const appRouter = router({
       clientName: z.string().min(1),
       brandLogoUrl: z.string().optional(),
       flowiseApiUrl: z.string().min(1),
-      flowiseApiKey: z.string().optional(),
       firstMessage: z.string().optional(),
     })).mutation(async ({ input, ctx }) => {
       const id = await db.createBot({ ...input, createdById: ctx.user.id });
@@ -43,9 +43,8 @@ export const appRouter = router({
       clientName: z.string().min(1).optional(),
       brandLogoUrl: z.string().optional(),
       flowiseApiUrl: z.string().min(1).optional(),
-      flowiseApiKey: z.string().optional(),
       firstMessage: z.string().optional(),
-      status: z.enum(["active", "paused", "archived"]).optional(),
+      status: z.enum(["in_review", "testing", "live", "not_live", "cancelled"]).optional(),
     })).mutation(async ({ input }) => {
       const { id, ...data } = input;
       await db.updateBot(id, data);
@@ -57,6 +56,54 @@ export const appRouter = router({
     }),
     analytics: adminProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
       return db.getBotAnalytics(input.id);
+    }),
+  }),
+
+  // ============ IMAGE UPLOAD ============
+  upload: router({
+    image: adminProcedure.input(z.object({
+      base64: z.string(),
+      filename: z.string(),
+      contentType: z.string(),
+    })).mutation(async ({ input }) => {
+      const buffer = Buffer.from(input.base64, "base64");
+      const key = `uploads/${nanoid(12)}-${input.filename}`;
+      const result = await storagePut(key, buffer, input.contentType);
+      return { url: result.url };
+    }),
+  }),
+
+  // ============ BANNERS ============
+  banners: router({
+    list: adminProcedure.query(async () => {
+      return db.listBanners();
+    }),
+    create: adminProcedure.input(z.object({
+      title: z.string().min(1),
+      content: z.string().min(1),
+      botId: z.number().nullable().optional(),
+    })).mutation(async ({ input, ctx }) => {
+      const id = await db.createBanner({ ...input, botId: input.botId ?? null, createdById: ctx.user.id });
+      return { id };
+    }),
+    update: adminProcedure.input(z.object({
+      id: z.number(),
+      title: z.string().min(1).optional(),
+      content: z.string().min(1).optional(),
+      botId: z.number().nullable().optional(),
+      isActive: z.boolean().optional(),
+    })).mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await db.updateBanner(id, data);
+      return { success: true };
+    }),
+    delete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      await db.deleteBanner(input.id);
+      return { success: true };
+    }),
+    // Public: get active banners for a bot
+    getForBot: publicProcedure.input(z.object({ botId: z.number() })).query(async ({ input }) => {
+      return db.getActiveBannersForBot(input.botId);
     }),
   }),
 
@@ -128,7 +175,6 @@ export const appRouter = router({
       const msgs = await db.listMessages(session.id);
       const feedback = await db.listFeedback(session.id);
       const note = await db.getSessionNote(session.id);
-      const tester = await db.getClientTesterByToken(""); // We need to get by id
       return { session, messages: msgs, feedback, note };
     }),
     getDetail: adminProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
@@ -212,7 +258,7 @@ export const appRouter = router({
           const fb = feedbackMap.get(m.id);
           if (fb) {
             fb.forEach(f => {
-              md += `> **${f.feedbackType === "like" ? "👍 Positive" : "👎 Negative"}:** ${f.comment || "No comment"}\n\n`;
+              md += `> **${f.feedbackType === "like" ? "Positive" : "Negative"}:** ${f.comment || "No comment"}\n\n`;
             });
           }
         });

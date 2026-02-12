@@ -2,7 +2,7 @@ import { integer, pgEnum, pgTable, text, timestamp, varchar, boolean, serial } f
 
 // ============ ENUMS ============
 export const roleEnum = pgEnum("role", ["user", "admin"]);
-export const botStatusEnum = pgEnum("bot_status", ["active", "paused", "archived"]);
+export const botStatusEnum = pgEnum("bot_status", ["in_review", "testing", "live", "not_live", "cancelled"]);
 export const sessionStatusEnum = pgEnum("session_status", ["live", "completed", "reviewed"]);
 export const messageRoleEnum = pgEnum("message_role", ["user", "bot"]);
 export const feedbackTypeEnum = pgEnum("feedback_type", ["like", "dislike"]);
@@ -32,7 +32,7 @@ export const bots = pgTable("bots", {
   flowiseApiUrl: text("flowiseApiUrl").notNull(),
   flowiseApiKey: text("flowiseApiKey"),
   firstMessage: text("firstMessage"),
-  status: botStatusEnum("status").default("active").notNull(),
+  status: botStatusEnum("status").default("testing").notNull(),
   createdById: integer("createdById").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
@@ -40,6 +40,21 @@ export const bots = pgTable("bots", {
 
 export type Bot = typeof bots.$inferSelect;
 export type InsertBot = typeof bots.$inferInsert;
+
+// ============ BANNERS ============
+export const banners = pgTable("banners", {
+  id: serial("id").primaryKey(),
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content").notNull(),
+  botId: integer("botId"), // null means applies to all bots
+  isActive: boolean("isActive").default(true).notNull(),
+  createdById: integer("createdById").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+
+export type Banner = typeof banners.$inferSelect;
+export type InsertBanner = typeof banners.$inferInsert;
 
 // ============ TEAMS ============
 export const teams = pgTable("teams", {

@@ -1,4 +1,4 @@
-import { eq, desc, and, sql, count } from "drizzle-orm";
+import { eq, desc, and, sql, count, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
   InsertUser, users,
@@ -10,6 +10,7 @@ import {
   messageFeedback,
   sessionNotes,
   clientNotes,
+  banners,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -82,7 +83,7 @@ export async function getBotById(id: number) {
   return result[0];
 }
 
-export async function updateBot(id: number, data: Partial<{ name: string; clientName: string; brandLogoUrl: string; flowiseApiUrl: string; flowiseApiKey: string; firstMessage: string; status: "active" | "paused" | "archived" }>) {
+export async function updateBot(id: number, data: Partial<{ name: string; clientName: string; brandLogoUrl: string; flowiseApiUrl: string; flowiseApiKey: string; firstMessage: string; status: "in_review" | "testing" | "live" | "not_live" | "cancelled" }>) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   await db.update(bots).set(data).where(eq(bots.id, id));
@@ -92,6 +93,45 @@ export async function deleteBot(id: number) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   await db.delete(bots).where(eq(bots.id, id));
+}
+
+// ============ BANNER HELPERS ============
+export async function createBanner(data: { title: string; content: string; botId?: number | null; createdById: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(banners).values(data).returning({ id: banners.id });
+  return result[0].id;
+}
+
+export async function listBanners() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(banners).orderBy(desc(banners.createdAt));
+}
+
+export async function updateBanner(id: number, data: Partial<{ title: string; content: string; botId: number | null; isActive: boolean }>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(banners).set(data).where(eq(banners.id, id));
+}
+
+export async function deleteBanner(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(banners).where(eq(banners.id, id));
+}
+
+export async function getActiveBannersForBot(botId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  // Get banners that are active AND (specific to this bot OR global)
+  const result = await db.select().from(banners).where(
+    and(
+      eq(banners.isActive, true),
+    )
+  ).orderBy(desc(banners.createdAt));
+  // Filter in JS: botId matches or botId is null (global)
+  return result.filter(b => b.botId === null || b.botId === botId);
 }
 
 // ============ TEAM HELPERS ============
@@ -283,7 +323,12 @@ export async function deleteClientNote(id: number) {
 // ============ ANALYTICS HELPERS ============
 export async function getAnalytics() {
   const db = await getDb();
-  if (!db) return { totalBots: 0, totalTesters: 0, totalSessions: 0, liveSessions: 0, completedSessions: 0, reviewedSessions: 0, totalMessages: 0, totalLikes: 0, totalDislikes: 0 };
+  if (!db) return {
+    totalBots: 0, totalTesters: 0, totalSessions: 0,
+    liveSessions: 0, completedSessions: 0, reviewedSessions: 0,
+    totalMessages: 0, totalLikes: 0, totalDislikes: 0,
+    botsInReview: 0, botsTesting: 0, botsLive: 0, botsNotLive: 0, botsCancelled: 0,
+  };
 
   const [botCount] = await db.select({ count: count() }).from(bots);
   const [testerCount] = await db.select({ count: count() }).from(clientTesters);
@@ -295,6 +340,13 @@ export async function getAnalytics() {
   const [likeCount] = await db.select({ count: count() }).from(messageFeedback).where(eq(messageFeedback.feedbackType, "like"));
   const [dislikeCount] = await db.select({ count: count() }).from(messageFeedback).where(eq(messageFeedback.feedbackType, "dislike"));
 
+  // Bot status counts
+  const [inReviewCount] = await db.select({ count: count() }).from(bots).where(eq(bots.status, "in_review"));
+  const [testingCount] = await db.select({ count: count() }).from(bots).where(eq(bots.status, "testing"));
+  const [botsLiveCount] = await db.select({ count: count() }).from(bots).where(eq(bots.status, "live"));
+  const [notLiveCount] = await db.select({ count: count() }).from(bots).where(eq(bots.status, "not_live"));
+  const [cancelledCount] = await db.select({ count: count() }).from(bots).where(eq(bots.status, "cancelled"));
+
   return {
     totalBots: botCount.count,
     totalTesters: testerCount.count,
@@ -305,6 +357,11 @@ export async function getAnalytics() {
     totalMessages: msgCount.count,
     totalLikes: likeCount.count,
     totalDislikes: dislikeCount.count,
+    botsInReview: inReviewCount.count,
+    botsTesting: testingCount.count,
+    botsLive: botsLiveCount.count,
+    botsNotLive: notLiveCount.count,
+    botsCancelled: cancelledCount.count,
   };
 }
 
