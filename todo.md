@@ -37,4 +37,4 @@
 ## Testing & Deployment
 - [x] Write vitest tests for backend procedures
 - [x] End-to-end verification
-- [ ] Push to GitHub repo
+- [x] Push to GitHub repo (via Management UI GitHub export)
