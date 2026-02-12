@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, Bot, Users, UsersRound, ClipboardList, BarChart3, LogOut, PanelLeft, Megaphone } from "lucide-react";
+import { LayoutDashboard, Bot, Users, UsersRound, ClipboardList, BarChart3, LogOut, PanelLeft, Megaphone, ShieldCheck } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -37,6 +37,7 @@ const menuItems = [
   { icon: ClipboardList, label: "الجلسات", path: "/sessions" },
   { icon: Megaphone, label: "البانرات", path: "/banners" },
   { icon: BarChart3, label: "التحليلات", path: "/analytics" },
+  { icon: ShieldCheck, label: "المسؤولون", path: "/admins" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
@@ -64,31 +65,9 @@ export default function DashboardLayout({
   }
 
   if (!user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background" dir="rtl">
-        <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
-          <img src={LOGO_URL} alt="DK-OctoBot" className="h-24 w-24" />
-          <div className="flex flex-col items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-center text-foreground">
-              لوحة تحكم DK-OctoBot
-            </h1>
-            <p className="text-sm text-muted-foreground text-center max-w-sm">
-              سجّل الدخول لإدارة منصة اختبار بوتات الذكاء الاصطناعي.
-            </p>
-            <a href="https://octobot.it.com" target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
-              octobot.it.com
-            </a>
-          </div>
-          <Button
-            onClick={() => { window.location.href = getLoginUrl(); }}
-            size="lg"
-            className="w-full shadow-lg hover:shadow-xl transition-all"
-          >
-            تسجيل الدخول
-          </Button>
-        </div>
-      </div>
-    );
+    // Redirect to login page
+    window.location.href = getLoginUrl();
+    return <DashboardLayoutSkeleton />;
   }
 
   if (user.role !== "admin") {

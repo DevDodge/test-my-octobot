@@ -18,6 +18,9 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   if (!isUnauthorized) return;
 
+  // Don't redirect if already on login page or chat page
+  if (window.location.pathname === "/login" || window.location.pathname.startsWith("/chat/")) return;
+
   window.location.href = getLoginUrl();
 };
 

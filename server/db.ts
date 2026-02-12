@@ -13,6 +13,7 @@ import {
   banners,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
+import bcrypt from "bcryptjs";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -36,7 +37,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   try {
     const values: InsertUser = { openId: user.openId };
     const updateSet: Record<string, unknown> = {};
-    const textFields = ["name", "email", "loginMethod"] as const;
+    const textFields = ["name", "email", "loginMethod", "password"] as const;
     type TextField = (typeof textFields)[number];
     const assignNullable = (field: TextField) => {
       const value = user[field];
@@ -48,7 +49,6 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     textFields.forEach(assignNullable);
     if (user.lastSignedIn !== undefined) { values.lastSignedIn = user.lastSignedIn; updateSet.lastSignedIn = user.lastSignedIn; }
     if (user.role !== undefined) { values.role = user.role; updateSet.role = user.role; }
-    else if (user.openId === ENV.ownerOpenId) { values.role = 'admin'; updateSet.role = 'admin'; }
     if (!values.lastSignedIn) values.lastSignedIn = new Date();
     if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
     await db.insert(users).values(values).onConflictDoUpdate({ target: users.openId, set: updateSet });
@@ -60,6 +60,79 @@ export async function getUserByOpenId(openId: string) {
   if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function listAdmins() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: users.id,
+    name: users.name,
+    email: users.email,
+    role: users.role,
+    createdAt: users.createdAt,
+    lastSignedIn: users.lastSignedIn,
+  }).from(users).where(eq(users.role, "admin")).orderBy(desc(users.createdAt));
+}
+
+export async function deleteUser(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(users).where(eq(users.id, id));
+}
+
+export async function updateUserPassword(id: number, hashedPassword: string) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(users).set({ password: hashedPassword }).where(eq(users.id, id));
+}
+
+// ============ SEED DEFAULT ADMIN ============
+export async function seedDefaultAdmin() {
+  const db = await getDb();
+  if (!db) { console.warn("[Seed] Cannot seed: database not available"); return; }
+
+  const defaultEmail = "DK-OctoBot-Tests@Gmail.com";
+  const defaultPassword = "Eng.OCTOBOT.DK.Company.Dodge.Kareem.12.it.com";
+
+  const existing = await getUserByEmail(defaultEmail);
+  if (!existing) {
+    const hashedPassword = await bcrypt.hash(defaultPassword, 12);
+    await upsertUser({
+      openId: `admin-${Date.now()}`,
+      name: "DK Admin",
+      email: defaultEmail,
+      password: hashedPassword,
+      role: "admin",
+      lastSignedIn: new Date(),
+    });
+    console.log("[Seed] Default admin created:", defaultEmail);
+  } else {
+    // Ensure the existing user has a password and is admin
+    if (!existing.password) {
+      const hashedPassword = await bcrypt.hash(defaultPassword, 12);
+      await updateUserPassword(existing.id, hashedPassword);
+      console.log("[Seed] Default admin password set");
+    }
+    if (existing.role !== "admin") {
+      await upsertUser({ openId: existing.openId, role: "admin" });
+      console.log("[Seed] Default admin role updated");
+    }
+  }
 }
 
 // ============ BOT HELPERS ============
@@ -124,13 +197,11 @@ export async function deleteBanner(id: number) {
 export async function getActiveBannersForBot(botId: number) {
   const db = await getDb();
   if (!db) return [];
-  // Get banners that are active AND (specific to this bot OR global)
   const result = await db.select().from(banners).where(
     and(
       eq(banners.isActive, true),
     )
   ).orderBy(desc(banners.createdAt));
-  // Filter in JS: botId matches or botId is null (global)
   return result.filter(b => b.botId === null || b.botId === botId);
 }
 
@@ -373,7 +444,6 @@ export async function getBotAnalytics(botId: number) {
   const [completedCount] = await db.select({ count: count() }).from(testSessions).where(and(eq(testSessions.botId, botId), eq(testSessions.status, "completed")));
   const [reviewedCount] = await db.select({ count: count() }).from(testSessions).where(and(eq(testSessions.botId, botId), eq(testSessions.status, "reviewed")));
 
-  // Get avg rating for reviewed sessions
   const ratings = await db.select({ rating: testSessions.reviewRating }).from(testSessions).where(and(eq(testSessions.botId, botId), eq(testSessions.reviewSubmitted, true)));
   const validRatings = ratings.filter(r => r.rating !== null).map(r => r.rating!);
   const avgRating = validRatings.length > 0 ? validRatings.reduce((a, b) => a + b, 0) / validRatings.length : 0;

@@ -1,26 +1,10 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
+import { COOKIE_NAME } from "@shared/const";
+import { parse as parseCookieHeader } from "cookie";
+import { jwtVerify } from "jose";
 import { ENV } from "./env";
-import { sdk } from "./sdk";
 import * as db from "../db";
-
-// Dev-mode fake admin user (used when OAuth is not configured)
-const DEV_ADMIN_OPEN_ID = "dev-admin-local";
-
-async function getOrCreateDevAdmin(): Promise<User> {
-  let user = await db.getUserByOpenId(DEV_ADMIN_OPEN_ID);
-  if (!user) {
-    await db.upsertUser({
-      openId: DEV_ADMIN_OPEN_ID,
-      name: "Local Admin",
-      email: "admin@localhost",
-      role: "admin",
-      lastSignedIn: new Date(),
-    });
-    user = await db.getUserByOpenId(DEV_ADMIN_OPEN_ID);
-  }
-  return user!;
-}
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -28,21 +12,35 @@ export type TrpcContext = {
   user: User | null;
 };
 
+function getSessionSecret() {
+  return new TextEncoder().encode(ENV.cookieSecret);
+}
+
 export async function createContext(
   opts: CreateExpressContextOptions
 ): Promise<TrpcContext> {
   let user: User | null = null;
 
-  // If OAuth is not configured, bypass auth with a local admin user
-  if (!ENV.oAuthServerUrl) {
-    user = await getOrCreateDevAdmin();
-  } else {
-    try {
-      user = await sdk.authenticateRequest(opts.req);
-    } catch (error) {
-      // Authentication is optional for public procedures.
-      user = null;
+  try {
+    const cookieHeader = opts.req.headers.cookie;
+    if (cookieHeader) {
+      const cookies = parseCookieHeader(cookieHeader);
+      const token = cookies[COOKIE_NAME];
+      if (token) {
+        const secretKey = getSessionSecret();
+        const { payload } = await jwtVerify(token, secretKey, { algorithms: ["HS256"] });
+        const userId = payload.userId as number;
+        if (userId) {
+          const dbUser = await db.getUserById(userId);
+          if (dbUser) {
+            user = dbUser;
+          }
+        }
+      }
     }
+  } catch (error) {
+    // Invalid or expired token - user stays null
+    user = null;
   }
 
   return {

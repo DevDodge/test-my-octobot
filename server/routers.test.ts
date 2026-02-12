@@ -18,6 +18,7 @@ function createAdminContext(): { ctx: TrpcContext; clearedCookies: CookieCall[] 
     openId: "admin-user",
     email: "admin@example.com",
     name: "Admin User",
+    password: null,
     loginMethod: "manus",
     role: "admin",
     createdAt: new Date(),

@@ -14,6 +14,8 @@ import SessionDetailPage from "./pages/SessionDetail";
 import AnalyticsPage from "./pages/Analytics";
 import BannersPage from "./pages/Banners";
 import ClientChat from "./pages/ClientChat";
+import LoginPage from "./pages/Login";
+import AdminManagementPage from "./pages/AdminManagement";
 
 function AdminRoutes() {
   return (
@@ -27,6 +29,7 @@ function AdminRoutes() {
         <Route path="/sessions/:id" component={SessionDetailPage} />
         <Route path="/banners" component={BannersPage} />
         <Route path="/analytics" component={AnalyticsPage} />
+        <Route path="/admins" component={AdminManagementPage} />
         <Route component={NotFound} />
       </Switch>
     </DashboardLayout>
@@ -36,6 +39,8 @@ function AdminRoutes() {
 function Router() {
   return (
     <Switch>
+      {/* Login page */}
+      <Route path="/login" component={LoginPage} />
       {/* Client chat - public route via share token */}
       <Route path="/chat/:token" component={ClientChat} />
       {/* All other routes go through admin dashboard */}

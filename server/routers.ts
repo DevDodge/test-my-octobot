@@ -7,6 +7,7 @@ import { nanoid } from "nanoid";
 import * as db from "./db";
 import axios from "axios";
 import { storagePut } from "./storage";
+import bcrypt from "bcryptjs";
 
 export const appRouter = router({
   system: systemRouter,
@@ -16,6 +17,50 @@ export const appRouter = router({
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
+    }),
+  }),
+
+  // ============ ADMIN MANAGEMENT ============
+  admins: router({
+    list: adminProcedure.query(async () => {
+      return db.listAdmins();
+    }),
+    create: adminProcedure.input(z.object({
+      name: z.string().min(1),
+      email: z.string().email().min(1),
+      password: z.string().min(6),
+    })).mutation(async ({ input }) => {
+      // Check if email already exists
+      const existing = await db.getUserByEmail(input.email);
+      if (existing) {
+        throw new Error("هذا البريد الإلكتروني مسجل بالفعل");
+      }
+      const hashedPassword = await bcrypt.hash(input.password, 12);
+      await db.upsertUser({
+        openId: `admin-${nanoid(12)}`,
+        name: input.name,
+        email: input.email,
+        password: hashedPassword,
+        role: "admin",
+        lastSignedIn: new Date(),
+      });
+      return { success: true };
+    }),
+    delete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input, ctx }) => {
+      // Prevent deleting yourself
+      if (ctx.user.id === input.id) {
+        throw new Error("لا يمكنك حذف حسابك الخاص");
+      }
+      await db.deleteUser(input.id);
+      return { success: true };
+    }),
+    updatePassword: adminProcedure.input(z.object({
+      id: z.number(),
+      password: z.string().min(6),
+    })).mutation(async ({ input }) => {
+      const hashedPassword = await bcrypt.hash(input.password, 12);
+      await db.updateUserPassword(input.id, hashedPassword);
+      return { success: true };
     }),
   }),
 
@@ -201,7 +246,6 @@ export const appRouter = router({
       if (!tester) throw new Error("Invalid share link");
       const bot = await db.getBotById(tester.botId);
       if (!bot) throw new Error("Bot not found");
-      // Check for existing live session
       const existingSessions = await db.listTestSessions(tester.botId, tester.id);
       const liveSession = existingSessions.find(s => s.status === "live");
       if (liveSession) {
@@ -209,13 +253,11 @@ export const appRouter = router({
         const note = await db.getSessionNote(liveSession.id);
         return { session: liveSession, bot, tester, messages: msgs, note };
       }
-      // Create new session
       const sessionToken = nanoid(24);
       const sessionId = await db.createTestSession({ sessionToken, botId: tester.botId, clientTesterId: tester.id });
       const newSession = await db.getTestSession(sessionId);
       return { session: newSession!, bot, tester, messages: [], note: undefined };
     }),
-    // Client-side: start new session (for re-testing)
     createNew: publicProcedure.input(z.object({ shareToken: z.string() })).mutation(async ({ input }) => {
       const tester = await db.getClientTesterByToken(input.shareToken);
       if (!tester) throw new Error("Invalid share link");
@@ -226,7 +268,6 @@ export const appRouter = router({
       const newSession = await db.getTestSession(sessionId);
       return { session: newSession!, bot, tester, messages: [], note: undefined };
     }),
-    // Export session as text
     export: adminProcedure.input(z.object({ id: z.number(), format: z.enum(["txt", "md"]) })).query(async ({ input }) => {
       const session = await db.getTestSession(input.id);
       if (!session) throw new Error("Session not found");
@@ -235,7 +276,6 @@ export const appRouter = router({
       const note = await db.getSessionNote(session.id);
       const bot = await db.getBotById(session.botId);
 
-      // Build feedback map
       const feedbackMap = new Map<number, typeof feedback>();
       feedback.forEach(f => {
         const existing = feedbackMap.get(f.messageId) || [];
@@ -302,7 +342,6 @@ export const appRouter = router({
       content: z.string().min(1),
       shareToken: z.string(),
     })).mutation(async ({ input }) => {
-      // Verify the tester owns this session
       const tester = await db.getClientTesterByToken(input.shareToken);
       if (!tester) throw new Error("Invalid share link");
       const session = await db.getTestSession(input.sessionId);
@@ -310,10 +349,8 @@ export const appRouter = router({
       const bot = await db.getBotById(session.botId);
       if (!bot) throw new Error("Bot not found");
 
-      // Save user message
       const userMsgId = await db.createMessage({ sessionId: input.sessionId, role: "user", content: input.content });
 
-      // Call Flowise API
       try {
         const headers: Record<string, string> = { "Content-Type": "application/json" };
         if (bot.flowiseApiKey) headers["Authorization"] = `Bearer ${bot.flowiseApiKey}`;
@@ -367,7 +404,6 @@ export const appRouter = router({
     getSessionNote: publicProcedure.input(z.object({ sessionId: z.number() })).query(async ({ input }) => {
       return db.getSessionNote(input.sessionId);
     }),
-    // Admin client notes
     listClientNotes: adminProcedure.input(z.object({ clientTesterId: z.number() })).query(async ({ input }) => {
       return db.listClientNotes(input.clientTesterId);
     }),
