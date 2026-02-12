@@ -139,13 +139,17 @@ export async function seedDefaultAdmin() {
 export async function createBot(data: { name: string; clientName: string; brandLogoUrl?: string; flowiseApiUrl: string; flowiseApiKey?: string; firstMessage?: string; createdById: number }) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  // Use raw SQL to insert with text cast for status to handle potential enum mismatch
-  const result = await db.execute(sql`
-    INSERT INTO bots ("name", "clientName", "brandLogoUrl", "flowiseApiUrl", "flowiseApiKey", "firstMessage", "status", "createdById", "createdAt", "updatedAt")
-    VALUES (${data.name}, ${data.clientName}, ${data.brandLogoUrl || null}, ${data.flowiseApiUrl}, ${data.flowiseApiKey || null}, ${data.firstMessage || null}, 'testing'::text::bot_status, ${data.createdById}, NOW(), NOW())
-    RETURNING id
-  `);
-  return (result.rows[0] as any).id as number;
+  const result = await db.insert(bots).values({
+    name: data.name,
+    clientName: data.clientName,
+    brandLogoUrl: data.brandLogoUrl || null,
+    flowiseApiUrl: data.flowiseApiUrl,
+    flowiseApiKey: data.flowiseApiKey || null,
+    firstMessage: data.firstMessage || null,
+    status: "testing",
+    createdById: data.createdById,
+  }).returning({ id: bots.id });
+  return result[0].id;
 }
 
 export async function listBots() {
@@ -164,18 +168,7 @@ export async function getBotById(id: number) {
 export async function updateBot(id: number, data: Partial<{ name: string; clientName: string; brandLogoUrl: string; flowiseApiUrl: string; flowiseApiKey: string; firstMessage: string; status: "in_review" | "testing" | "live" | "not_live" | "cancelled" }>) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  // If status is being updated, use raw SQL to cast the value as text first to avoid enum mismatch
-  if (data.status) {
-    const { status, ...rest } = data;
-    // Update status separately using raw SQL to handle potential enum mismatch
-    await db.execute(sql`UPDATE bots SET status = ${status}::text::bot_status WHERE id = ${id}`);
-    // Update remaining fields if any
-    if (Object.keys(rest).length > 0) {
-      await db.update(bots).set(rest).where(eq(bots.id, id));
-    }
-  } else {
-    await db.update(bots).set(data).where(eq(bots.id, id));
-  }
+  await db.update(bots).set(data).where(eq(bots.id, id));
 }
 
 export async function deleteBot(id: number) {
