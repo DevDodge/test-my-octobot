@@ -16,6 +16,14 @@ import { motion, AnimatePresence } from "framer-motion";
 const LOGO_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663346430490/lltjiETQWNdEtrRM.svg";
 const WHATSAPP_LINK = "https://wa.me/201505354810";
 
+/** Convert standalone image URLs in text to markdown image syntax */
+function formatImageUrls(text: string): string {
+  return text.replace(
+    /(https?:\/\/[^\s]+\.(?:jpg|jpeg|png|gif|webp|svg|bmp|tiff))/gi,
+    (url) => `\n![](${url})\n`
+  );
+}
+
 type ChatMessage = {
   id: number;
   role: "user" | "bot";
@@ -94,11 +102,10 @@ function TypingIndicator({ theme }: { theme: ChatTheme }) {
       className="flex items-start gap-3 flex-row-reverse"
     >
       <div className="relative">
-        <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 backdrop-blur-sm ${
-          theme === "dark"
-            ? "bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/20"
-            : "bg-gradient-to-br from-blue-100 to-indigo-100 border border-blue-200"
-        }`}>
+        <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 backdrop-blur-sm ${theme === "dark"
+          ? "bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/20"
+          : "bg-gradient-to-br from-blue-100 to-indigo-100 border border-blue-200"
+          }`}>
           <Brain className={`h-4 w-4 ${theme === "dark" ? "text-cyan-400" : "text-blue-600"}`} />
         </div>
         <motion.div
@@ -107,11 +114,10 @@ function TypingIndicator({ theme }: { theme: ChatTheme }) {
           transition={{ duration: 1.5, repeat: Infinity }}
         />
       </div>
-      <div className={`rounded-2xl rounded-tr-sm px-5 py-3 backdrop-blur-md ${
-        theme === "dark"
-          ? "bg-white/[0.04] border border-white/[0.08]"
-          : "bg-white border border-gray-200 shadow-sm"
-      }`}>
+      <div className={`rounded-2xl rounded-tr-sm px-5 py-3 backdrop-blur-md ${theme === "dark"
+        ? "bg-white/[0.04] border border-white/[0.08]"
+        : "bg-white border border-gray-200 shadow-sm"
+        }`}>
         <NeuralLoader theme={theme} />
       </div>
     </motion.div>
@@ -128,11 +134,10 @@ function BannerDisplay({ banners, theme }: { banners: any[]; theme: ChatTheme })
           key={banner.id}
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`rounded-xl px-4 py-3 flex items-start gap-3 ${
-            theme === "dark"
-              ? "bg-amber-500/[0.08] border border-amber-500/20"
-              : "bg-amber-50 border border-amber-200"
-          }`}
+          className={`rounded-xl px-4 py-3 flex items-start gap-3 ${theme === "dark"
+            ? "bg-amber-500/[0.08] border border-amber-500/20"
+            : "bg-amber-50 border border-amber-200"
+            }`}
         >
           <Megaphone className={`h-4 w-4 shrink-0 mt-0.5 ${theme === "dark" ? "text-amber-400" : "text-amber-600"}`} />
           <div>
@@ -505,11 +510,10 @@ export default function ClientChat() {
             <div className="flex items-center gap-3">
               <div className="relative group">
                 <div className={`absolute inset-0 rounded-xl blur-md group-hover:blur-lg transition-all ${isDark ? "bg-cyan-400/20" : "bg-blue-400/10"}`} />
-                <div className={`relative h-10 w-10 rounded-xl flex items-center justify-center overflow-hidden ${
-                  isDark
-                    ? "bg-gradient-to-br from-[#0d1a30] to-[#162040] border border-cyan-500/20"
-                    : "bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200"
-                }`}>
+                <div className={`relative h-10 w-10 rounded-xl flex items-center justify-center overflow-hidden ${isDark
+                  ? "bg-gradient-to-br from-[#0d1a30] to-[#162040] border border-cyan-500/20"
+                  : "bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200"
+                  }`}>
                   <img src={LOGO_URL} alt="DK-OctoBot" className={`h-7 w-7 ${isDark ? "drop-shadow-[0_0_8px_rgba(76,201,240,0.3)]" : ""}`} />
                 </div>
               </div>
@@ -522,9 +526,8 @@ export default function ClientChat() {
 
               {bot?.brandLogoUrl && (
                 <div className="relative">
-                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center overflow-hidden ${
-                    isDark ? "bg-white/[0.06] border border-white/[0.1]" : "bg-gray-50 border border-gray-200"
-                  }`}>
+                  <div className={`h-10 w-10 rounded-xl flex items-center justify-center overflow-hidden ${isDark ? "bg-white/[0.06] border border-white/[0.1]" : "bg-gray-50 border border-gray-200"
+                    }`}>
                     <img src={bot.brandLogoUrl} alt="" className="h-7 w-7 rounded-lg object-cover" />
                   </div>
                 </div>
@@ -552,11 +555,10 @@ export default function ClientChat() {
               {/* Theme toggle */}
               <button
                 onClick={toggleChatTheme}
-                className={`group relative p-2 rounded-xl transition-all duration-300 ${
-                  isDark
-                    ? "bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] hover:border-cyan-500/20"
-                    : "bg-gray-100 hover:bg-gray-200 border border-gray-200 hover:border-blue-300"
-                }`}
+                className={`group relative p-2 rounded-xl transition-all duration-300 ${isDark
+                  ? "bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] hover:border-cyan-500/20"
+                  : "bg-gray-100 hover:bg-gray-200 border border-gray-200 hover:border-blue-300"
+                  }`}
                 title={isDark ? "الوضع الفاتح" : "الوضع الداكن"}
               >
                 {isDark ? (
@@ -568,11 +570,10 @@ export default function ClientChat() {
 
               <button
                 onClick={() => setNotesModal(true)}
-                className={`group relative p-2 rounded-xl transition-all duration-300 ${
-                  isDark
-                    ? "bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] hover:border-cyan-500/20"
-                    : "bg-gray-100 hover:bg-gray-200 border border-gray-200 hover:border-blue-300"
-                }`}
+                className={`group relative p-2 rounded-xl transition-all duration-300 ${isDark
+                  ? "bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] hover:border-cyan-500/20"
+                  : "bg-gray-100 hover:bg-gray-200 border border-gray-200 hover:border-blue-300"
+                  }`}
                 title="ملاحظات الجلسة"
               >
                 <StickyNote className={`h-4 w-4 transition-colors ${isDark ? "text-white/40 group-hover:text-cyan-400" : "text-gray-400 group-hover:text-blue-500"}`} />
@@ -583,11 +584,10 @@ export default function ClientChat() {
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setReviewModal(true)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-300 ${
-                    isDark
-                      ? "bg-gradient-to-l from-cyan-500/20 to-blue-600/20 hover:from-cyan-500/30 hover:to-blue-600/30 border border-cyan-500/20 text-cyan-300"
-                      : "bg-gradient-to-l from-blue-500/10 to-indigo-500/10 hover:from-blue-500/20 hover:to-indigo-500/20 border border-blue-300 text-blue-600"
-                  }`}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium transition-all duration-300 ${isDark
+                    ? "bg-gradient-to-l from-cyan-500/20 to-blue-600/20 hover:from-cyan-500/30 hover:to-blue-600/30 border border-cyan-500/20 text-cyan-300"
+                    : "bg-gradient-to-l from-blue-500/10 to-indigo-500/10 hover:from-blue-500/20 hover:to-indigo-500/20 border border-blue-300 text-blue-600"
+                    }`}
                 >
                   <Star className="h-3.5 w-3.5" />
                   <span>إرسال التقييم</span>
@@ -619,23 +619,21 @@ export default function ClientChat() {
               className="flex items-start gap-3 flex-row-reverse"
             >
               <div className="relative">
-                <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 backdrop-blur-sm ${
-                  isDark
-                    ? "bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/20"
-                    : "bg-gradient-to-br from-blue-100 to-indigo-100 border border-blue-200"
-                }`}>
+                <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 backdrop-blur-sm ${isDark
+                  ? "bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/20"
+                  : "bg-gradient-to-br from-blue-100 to-indigo-100 border border-blue-200"
+                  }`}>
                   <Bot className={`h-4 w-4 ${isDark ? "text-cyan-400" : "text-blue-600"}`} />
                 </div>
                 <div className={`absolute -bottom-0.5 -left-0.5 w-2.5 h-2.5 rounded-full border-2 ${isDark ? "bg-emerald-400 border-[#0a0e1a]" : "bg-green-500 border-white"}`} />
               </div>
               <div className="max-w-[85%] sm:max-w-[75%]">
-                <div className={`rounded-2xl rounded-tr-sm px-4 py-3 shadow-lg ${
-                  isDark
-                    ? "bg-white/[0.04] border border-white/[0.08] backdrop-blur-md"
-                    : "bg-white border border-gray-200 shadow-md"
-                }`}>
+                <div className={`rounded-2xl rounded-tr-sm px-4 py-3 shadow-lg ${isDark
+                  ? "bg-white/[0.04] border border-white/[0.08] backdrop-blur-md"
+                  : "bg-white border border-gray-200 shadow-md"
+                  }`}>
                   <div className={`text-sm leading-relaxed ${isDark ? "text-white/80 prose-invert" : "text-gray-700"}`}>
-                    <Streamdown>{bot.firstMessage}</Streamdown>
+                    <Streamdown>{formatImageUrls(bot.firstMessage)}</Streamdown>
                   </div>
                 </div>
               </div>
@@ -658,20 +656,18 @@ export default function ClientChat() {
                   {/* Avatar */}
                   <div className="relative shrink-0">
                     {isUser ? (
-                      <div className={`h-9 w-9 rounded-xl flex items-center justify-center ${
-                        isDark
-                          ? "bg-gradient-to-br from-blue-500/20 to-indigo-600/20 border border-blue-500/20"
-                          : "bg-gradient-to-br from-blue-100 to-indigo-100 border border-blue-200"
-                      }`}>
+                      <div className={`h-9 w-9 rounded-xl flex items-center justify-center ${isDark
+                        ? "bg-gradient-to-br from-blue-500/20 to-indigo-600/20 border border-blue-500/20"
+                        : "bg-gradient-to-br from-blue-100 to-indigo-100 border border-blue-200"
+                        }`}>
                         <User className={`h-4 w-4 ${isDark ? "text-blue-400" : "text-blue-600"}`} />
                       </div>
                     ) : (
                       <div className="relative">
-                        <div className={`h-9 w-9 rounded-xl flex items-center justify-center backdrop-blur-sm ${
-                          isDark
-                            ? "bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/20"
-                            : "bg-gradient-to-br from-blue-100 to-indigo-100 border border-blue-200"
-                        }`}>
+                        <div className={`h-9 w-9 rounded-xl flex items-center justify-center backdrop-blur-sm ${isDark
+                          ? "bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/20"
+                          : "bg-gradient-to-br from-blue-100 to-indigo-100 border border-blue-200"
+                          }`}>
                           <Bot className={`h-4 w-4 ${isDark ? "text-cyan-400" : "text-blue-600"}`} />
                         </div>
                         <div className={`absolute -bottom-0.5 -left-0.5 w-2.5 h-2.5 rounded-full border-2 ${isDark ? "bg-emerald-400 border-[#0a0e1a]" : "bg-green-500 border-white"}`} />
@@ -682,18 +678,17 @@ export default function ClientChat() {
                   {/* Message bubble */}
                   <div className="max-w-[85%] sm:max-w-[75%] space-y-2">
                     <div
-                      className={`rounded-2xl px-4 py-3 shadow-lg ${
-                        isUser
-                          ? isDark
-                            ? "bg-gradient-to-l from-blue-600/90 to-blue-700/90 text-white rounded-tl-sm border border-blue-500/20"
-                            : "bg-gradient-to-l from-blue-500 to-blue-600 text-white rounded-tl-sm shadow-blue-500/20"
-                          : isDark
-                            ? "bg-white/[0.04] border border-white/[0.08] backdrop-blur-md text-white/80 rounded-tr-sm"
-                            : "bg-white border border-gray-200 text-gray-700 rounded-tr-sm shadow-md"
-                      }`}
+                      className={`rounded-2xl px-4 py-3 shadow-lg ${isUser
+                        ? isDark
+                          ? "bg-gradient-to-l from-blue-600/90 to-blue-700/90 text-white rounded-tl-sm border border-blue-500/20"
+                          : "bg-gradient-to-l from-blue-500 to-blue-600 text-white rounded-tl-sm shadow-blue-500/20"
+                        : isDark
+                          ? "bg-white/[0.04] border border-white/[0.08] backdrop-blur-md text-white/80 rounded-tr-sm"
+                          : "bg-white border border-gray-200 text-gray-700 rounded-tr-sm shadow-md"
+                        }`}
                     >
                       <div className={`text-sm leading-relaxed ${!isUser && isDark ? "prose-invert" : ""}`}>
-                        <Streamdown>{msg.content}</Streamdown>
+                        <Streamdown>{formatImageUrls(msg.content)}</Streamdown>
                       </div>
                     </div>
 
@@ -702,18 +697,17 @@ export default function ClientChat() {
                       <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: "auto" }}
-                        className={`rounded-xl px-3 py-2 backdrop-blur-sm ${
-                          isDark
-                            ? "bg-amber-500/[0.06] border border-amber-500/20"
-                            : "bg-amber-50 border border-amber-200"
-                        }`}
+                        className={`rounded-xl px-3 py-2 backdrop-blur-sm ${isDark
+                          ? "bg-amber-500/[0.06] border border-amber-500/20"
+                          : "bg-amber-50 border border-amber-200"
+                          }`}
                       >
                         <div className="flex items-center gap-1.5 mb-1">
                           <Pencil className={`h-3 w-3 ${isDark ? "text-amber-400/70" : "text-amber-600"}`} />
                           <span className={`text-[10px] font-medium ${isDark ? "text-amber-400/70" : "text-amber-600"}`}>تم التعديل</span>
                         </div>
                         <div className={`text-xs leading-relaxed ${isDark ? "text-white/60" : "text-gray-600"}`}>
-                          <Streamdown>{msg.editedContent}</Streamdown>
+                          <Streamdown>{formatImageUrls(msg.editedContent)}</Streamdown>
                         </div>
                       </motion.div>
                     )}
@@ -723,33 +717,30 @@ export default function ClientChat() {
                       <div className="flex gap-1 mt-1">
                         <button
                           onClick={() => { setFeedbackModal({ messageId: msg.id, type: "like" }); setFeedbackComment(""); }}
-                          className={`group p-1.5 rounded-lg border border-transparent transition-all duration-300 ${
-                            isDark
-                              ? "bg-white/[0.02] hover:bg-emerald-500/10 hover:border-emerald-500/20"
-                              : "bg-gray-50 hover:bg-green-50 hover:border-green-200"
-                          }`}
+                          className={`group p-1.5 rounded-lg border border-transparent transition-all duration-300 ${isDark
+                            ? "bg-white/[0.02] hover:bg-emerald-500/10 hover:border-emerald-500/20"
+                            : "bg-gray-50 hover:bg-green-50 hover:border-green-200"
+                            }`}
                           title="إعجاب"
                         >
                           <ThumbsUp className={`h-3.5 w-3.5 transition-colors ${isDark ? "text-white/20 group-hover:text-emerald-400" : "text-gray-300 group-hover:text-green-500"}`} />
                         </button>
                         <button
                           onClick={() => { setFeedbackModal({ messageId: msg.id, type: "dislike" }); setFeedbackComment(""); }}
-                          className={`group p-1.5 rounded-lg border border-transparent transition-all duration-300 ${
-                            isDark
-                              ? "bg-white/[0.02] hover:bg-red-500/10 hover:border-red-500/20"
-                              : "bg-gray-50 hover:bg-red-50 hover:border-red-200"
-                          }`}
+                          className={`group p-1.5 rounded-lg border border-transparent transition-all duration-300 ${isDark
+                            ? "bg-white/[0.02] hover:bg-red-500/10 hover:border-red-500/20"
+                            : "bg-gray-50 hover:bg-red-50 hover:border-red-200"
+                            }`}
                           title="عدم إعجاب"
                         >
                           <ThumbsDown className={`h-3.5 w-3.5 transition-colors ${isDark ? "text-white/20 group-hover:text-red-400" : "text-gray-300 group-hover:text-red-500"}`} />
                         </button>
                         <button
                           onClick={() => { setEditModal({ messageId: msg.id, content: msg.content }); setEditContent(msg.editedContent || msg.content); }}
-                          className={`group p-1.5 rounded-lg border border-transparent transition-all duration-300 ${
-                            isDark
-                              ? "bg-white/[0.02] hover:bg-cyan-500/10 hover:border-cyan-500/20"
-                              : "bg-gray-50 hover:bg-blue-50 hover:border-blue-200"
-                          }`}
+                          className={`group p-1.5 rounded-lg border border-transparent transition-all duration-300 ${isDark
+                            ? "bg-white/[0.02] hover:bg-cyan-500/10 hover:border-cyan-500/20"
+                            : "bg-gray-50 hover:bg-blue-50 hover:border-blue-200"
+                            }`}
                           title="تعديل"
                         >
                           <Pencil className={`h-3.5 w-3.5 transition-colors ${isDark ? "text-white/20 group-hover:text-cyan-400" : "text-gray-300 group-hover:text-blue-500"}`} />
@@ -787,11 +778,10 @@ export default function ClientChat() {
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                   placeholder="اكتب رسالتك هنا..."
-                  className={`resize-none min-h-[48px] max-h-36 rounded-xl text-sm transition-all duration-300 font-tajawal ${
-                    isDark
-                      ? "bg-white/[0.04] border-white/[0.08] hover:border-white/[0.12] focus:border-cyan-500/30 focus:ring-1 focus:ring-cyan-500/10 text-white/90 placeholder:text-white/20"
-                      : "bg-gray-50 border-gray-200 hover:border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-400/20 text-gray-900 placeholder:text-gray-400"
-                  }`}
+                  className={`resize-none min-h-[48px] max-h-36 rounded-xl text-sm transition-all duration-300 font-tajawal ${isDark
+                    ? "bg-white/[0.04] border-white/[0.08] hover:border-white/[0.12] focus:border-cyan-500/30 focus:ring-1 focus:ring-cyan-500/10 text-white/90 placeholder:text-white/20"
+                    : "bg-gray-50 border-gray-200 hover:border-gray-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-400/20 text-gray-900 placeholder:text-gray-400"
+                    }`}
                   rows={1}
                   disabled={isLoading}
                   dir="rtl"
@@ -802,11 +792,10 @@ export default function ClientChat() {
                 whileTap={{ scale: 0.95 }}
                 onClick={handleSend}
                 disabled={!inputText.trim() || isLoading}
-                className={`h-12 w-12 rounded-xl flex items-center justify-center transition-all duration-300 shrink-0 ${
-                  isDark
-                    ? "bg-gradient-to-l from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:from-white/[0.06] disabled:to-white/[0.06] shadow-lg shadow-cyan-500/20 disabled:shadow-none"
-                    : "bg-gradient-to-l from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 disabled:from-gray-200 disabled:to-gray-200 shadow-lg shadow-blue-500/20 disabled:shadow-none"
-                } disabled:cursor-not-allowed`}
+                className={`h-12 w-12 rounded-xl flex items-center justify-center transition-all duration-300 shrink-0 ${isDark
+                  ? "bg-gradient-to-l from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:from-white/[0.06] disabled:to-white/[0.06] shadow-lg shadow-cyan-500/20 disabled:shadow-none"
+                  : "bg-gradient-to-l from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 disabled:from-gray-200 disabled:to-gray-200 shadow-lg shadow-blue-500/20 disabled:shadow-none"
+                  } disabled:cursor-not-allowed`}
               >
                 <Send className="h-4 w-4 text-white rotate-180" />
               </motion.button>
@@ -953,11 +942,10 @@ export default function ClientChat() {
                     className="p-1 transition-all duration-200"
                   >
                     <Star
-                      className={`h-9 w-9 transition-all duration-200 ${
-                        n <= reviewRating
-                          ? "text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.4)]"
-                          : textMuted
-                      }`}
+                      className={`h-9 w-9 transition-all duration-200 ${n <= reviewRating
+                        ? "text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.4)]"
+                        : textMuted
+                        }`}
                       fill={n <= reviewRating ? "currentColor" : "none"}
                     />
                   </motion.button>
