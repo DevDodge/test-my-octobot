@@ -103,6 +103,8 @@ export const testSessions = pgTable("test_sessions", {
   reviewRating: integer("reviewRating"),
   reviewComment: text("reviewComment"),
   assignedTeamMemberId: integer("assignedTeamMemberId"),
+  createdByRefresh: boolean("createdByRefresh").default(false).notNull(),
+  lastSeenAt: timestamp("lastSeenAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });

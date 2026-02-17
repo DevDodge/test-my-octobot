@@ -269,10 +269,22 @@ export const appRouter = router({
       if (!tester) throw new Error("Invalid share link");
       const bot = await db.getBotById(tester.botId);
       if (!bot) throw new Error("Bot not found");
+      // Create a new session without touching existing ones - old sessions keep all data
       const sessionToken = nanoid(24);
-      const sessionId = await db.createTestSession({ sessionToken, botId: tester.botId, clientTesterId: tester.id });
+      const sessionId = await db.createTestSession({ sessionToken, botId: tester.botId, clientTesterId: tester.id, createdByRefresh: true });
       const newSession = await db.getTestSession(sessionId);
       return { session: newSession!, bot, tester, messages: [], note: undefined };
+    }),
+    // Client heartbeat - updates lastSeenAt for presence tracking
+    heartbeat: publicProcedure.input(z.object({ sessionId: z.number(), shareToken: z.string() })).mutation(async ({ input }) => {
+      const tester = await db.getClientTesterByToken(input.shareToken);
+      if (!tester) throw new Error("Invalid share link");
+      await db.updateSessionLastSeen(input.sessionId);
+      return { ok: true };
+    }),
+    // Admin: get message counts for all sessions
+    messageCounts: adminProcedure.query(async () => {
+      return db.getMessageCountsForSessions();
     }),
     export: adminProcedure.input(z.object({ id: z.number(), format: z.enum(["txt", "md"]) })).query(async ({ input }) => {
       const session = await db.getTestSession(input.id);
@@ -448,6 +460,43 @@ export const appRouter = router({
   analytics: router({
     overview: adminProcedure.query(async () => {
       return db.getAnalytics();
+    }),
+  }),
+
+  // ============ LINK PREVIEW ============
+  linkPreview: router({
+    fetch: publicProcedure.input(z.object({ url: z.string().url() })).query(async ({ input }) => {
+      try {
+        const response = await axios.get(input.url, {
+          timeout: 5000,
+          maxRedirects: 5,
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; OctoBot/1.0)" },
+          responseType: "text",
+        });
+        const html = typeof response.data === "string" ? response.data : "";
+        const getMetaContent = (property: string): string | null => {
+          const regex = new RegExp(`<meta[^>]*(?:property|name)=["']${property}["'][^>]*content=["']([^"']*)["']`, "i");
+          const match = html.match(regex);
+          if (match) return match[1];
+          // Try reversed attribute order
+          const regex2 = new RegExp(`<meta[^>]*content=["']([^"']*)["'][^>]*(?:property|name)=["']${property}["']`, "i");
+          const match2 = html.match(regex2);
+          return match2 ? match2[1] : null;
+        };
+        const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+        const title = getMetaContent("og:title") || getMetaContent("twitter:title") || (titleMatch ? titleMatch[1].trim() : null);
+        const description = getMetaContent("og:description") || getMetaContent("twitter:description") || getMetaContent("description");
+        const image = getMetaContent("og:image") || getMetaContent("twitter:image");
+        const siteName = getMetaContent("og:site_name");
+        const url = new URL(input.url);
+        const domain = url.hostname.replace("www.", "");
+        const favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+        return { title, description, image, siteName, domain, favicon, url: input.url };
+      } catch {
+        const url = new URL(input.url);
+        const domain = url.hostname.replace("www.", "");
+        return { title: null, description: null, image: null, siteName: null, domain, favicon: `https://www.google.com/s2/favicons?domain=${domain}&sz=64`, url: input.url };
+      }
     }),
   }),
 });

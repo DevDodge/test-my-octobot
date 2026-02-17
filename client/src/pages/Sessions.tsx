@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ClipboardList, Eye } from "lucide-react";
+import { ClipboardList, Eye, RefreshCcw } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 
@@ -86,7 +86,17 @@ export default function SessionsPage() {
                 {filteredSessions.map((session) => (
                   <TableRow key={session.id}>
                     <TableCell className="font-medium">{getBotName(session.botId)}</TableCell>
-                    <TableCell>{getTesterName(session.clientTesterId)}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        {getTesterName(session.clientTesterId)}
+                        {session.createdByRefresh && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 gap-0.5 border-amber-300 text-amber-600 bg-amber-50">
+                            <RefreshCcw className="h-2.5 w-2.5" />
+                            ريفريش
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell><Badge className={statusColor(session.status)}>{statusLabel(session.status)}</Badge></TableCell>
                     <TableCell className="hidden sm:table-cell">
                       {session.reviewRating ? `${session.reviewRating}/5` : "-"}

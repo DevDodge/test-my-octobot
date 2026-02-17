@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, Bot, ExternalLink, Copy, UserPlus, Link2, CheckCircle2, ClipboardList, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Bot, ExternalLink, Copy, UserPlus, Link2, CheckCircle2, ClipboardList, Upload, Users, MessageCircle, RefreshCcw } from "lucide-react";
 import { useState, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -37,6 +37,8 @@ export default function BotsPage() {
   const [, setLocation] = useLocation();
   const { data: bots, isLoading } = trpc.bots.list.useQuery();
   const { data: testers } = trpc.testers.list.useQuery();
+  const { data: sessions } = trpc.sessions.list.useQuery(undefined, { refetchInterval: 15000 });
+  const { data: messageCounts } = trpc.sessions.messageCounts.useQuery(undefined, { refetchInterval: 15000 });
   const createBot = trpc.bots.create.useMutation({ onSuccess: () => { utils.bots.list.invalidate(); } });
   const updateBot = trpc.bots.update.useMutation({ onSuccess: () => { utils.bots.list.invalidate(); toast.success("تم تحديث البوت"); } });
   const deleteBot = trpc.bots.delete.useMutation({ onSuccess: () => { utils.bots.list.invalidate(); toast.success("تم حذف البوت"); } });
@@ -169,6 +171,12 @@ export default function BotsPage() {
   };
 
   const getTestersForBot = (botId: number) => testers?.filter(t => t.botId === botId) || [];
+  const getSessionsForTester = (testerId: number) => sessions?.filter(s => s.clientTesterId === testerId) || [];
+  const getMsgCountForSession = (sessionId: number) => messageCounts?.find(mc => mc.sessionId === sessionId)?.count ?? 0;
+  const isSessionOnline = (s: any) => {
+    if (!s.lastSeenAt) return false;
+    return (Date.now() - new Date(s.lastSeenAt).getTime()) < 60000; // within 60s
+  };
 
   // Inline form JSX builder to avoid re-mounting on state changes
   const renderBotForm = (onSubmit: () => void, submitLabel: string, fileRef: React.RefObject<HTMLInputElement | null>) => (
@@ -365,30 +373,57 @@ export default function BotsPage() {
 
                   {/* Show existing test links */}
                   {botTesters.length > 0 && (
-                    <div className="space-y-1.5">
-                      <div className="text-xs font-medium text-muted-foreground">روابط الاختبار ({botTesters.length})</div>
-                      {botTesters.slice(0, 3).map((tester) => (
-                        <div key={tester.id} className="flex items-center gap-2 text-xs">
-                          <span className="truncate text-muted-foreground">{tester.name}</span>
-                          <div className="flex gap-1 shrink-0">
-                            <Button variant="ghost" size="sm" className="h-6 px-1.5" onClick={() => {
-                              const link = `${window.location.origin}/chat/${tester.shareToken}`;
-                              navigator.clipboard.writeText(link);
-                              toast.success("تم نسخ الرابط!");
-                            }}>
-                              <Copy className="h-3 w-3" />
-                            </Button>
-                            <Button variant="ghost" size="sm" className="h-6 px-1.5" asChild>
-                              <a href={`/chat/${tester.shareToken}`} target="_blank" rel="noopener noreferrer">
-                                <ExternalLink className="h-3 w-3" />
-                              </a>
-                            </Button>
-                          </div>
+                    <div className="rounded-lg border border-border/60 overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2 bg-muted/40 border-b border-border/60">
+                        <div className="flex items-center gap-2">
+                          <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-xs font-medium text-foreground">روابط الاختبار</span>
                         </div>
-                      ))}
-                      {botTesters.length > 3 && (
-                        <p className="text-xs text-muted-foreground">+{botTesters.length - 3} المزيد</p>
-                      )}
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 font-semibold">{botTesters.length}</Badge>
+                      </div>
+                      <div className="divide-y divide-border/40 max-h-[180px] overflow-y-auto">
+                        {botTesters.map((tester, index) => {
+                          const testerSessions = getSessionsForTester(tester.id);
+                          const totalMsgCount = testerSessions.reduce((acc, s) => acc + getMsgCountForSession(s.id), 0);
+                          const isOnline = testerSessions.some(s => isSessionOnline(s));
+                          const hasRefreshSession = testerSessions.some(s => s.createdByRefresh);
+                          return (
+                            <div key={tester.id} className="flex items-center justify-between px-3 py-1.5 hover:bg-muted/30 transition-colors group">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-[10px] text-muted-foreground/60 font-mono w-4 text-center shrink-0">{index + 1}</span>
+                                <div className="h-6 w-6 rounded-full bg-primary/8 flex items-center justify-center shrink-0">
+                                  <span className="text-[10px] font-medium text-primary">{tester.name?.charAt(0)?.toUpperCase()}</span>
+                                </div>
+                                <span className="text-xs text-foreground/80 truncate">{tester.name}</span>
+                                {testerSessions.length > 0 && (
+                                  <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isOnline
+                                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
+                                      : "bg-gray-100 text-gray-500 dark:bg-gray-500/15 dark:text-gray-400"
+                                    }`}>
+                                    {isOnline && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+                                    {hasRefreshSession ? <RefreshCcw className="h-2.5 w-2.5" /> : <MessageCircle className="h-2.5 w-2.5" />}
+                                    {totalMsgCount}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex gap-0.5 shrink-0 opacity-60 group-hover:opacity-100 transition-opacity">
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-md hover:bg-primary/10 hover:text-primary" onClick={() => {
+                                  const link = `${window.location.origin}/chat/${tester.shareToken}`;
+                                  navigator.clipboard.writeText(link);
+                                  toast.success("تم نسخ الرابط!");
+                                }} title="نسخ الرابط">
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-md hover:bg-primary/10 hover:text-primary" asChild title="فتح المحادثة">
+                                  <a href={`/chat/${tester.shareToken}`} target="_blank" rel="noopener noreferrer">
+                                    <ExternalLink className="h-3 w-3" />
+                                  </a>
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
 

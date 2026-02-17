@@ -289,10 +289,10 @@ export async function deleteClientTester(id: number) {
 }
 
 // ============ TEST SESSION HELPERS ============
-export async function createTestSession(data: { sessionToken: string; botId: number; clientTesterId: number }) {
+export async function createTestSession(data: { sessionToken: string; botId: number; clientTesterId: number; createdByRefresh?: boolean }) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(testSessions).values(data).returning({ id: testSessions.id });
+  const result = await db.insert(testSessions).values({ ...data, status: "live", createdByRefresh: data.createdByRefresh ?? false }).returning({ id: testSessions.id });
   return result[0].id;
 }
 
@@ -320,10 +320,22 @@ export async function getTestSessionByToken(sessionToken: string) {
   return result[0];
 }
 
-export async function updateTestSession(id: number, data: Partial<{ status: "live" | "completed" | "reviewed"; adminNotes: string; reviewSubmitted: boolean; reviewRating: number; reviewComment: string; assignedTeamMemberId: number }>) {
+export async function updateTestSession(id: number, data: Partial<{ status: "live" | "completed" | "reviewed"; adminNotes: string; reviewSubmitted: boolean; reviewRating: number; reviewComment: string; assignedTeamMemberId: number; lastSeenAt: Date }>) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   await db.update(testSessions).set(data).where(eq(testSessions.id, id));
+}
+
+export async function updateSessionLastSeen(sessionId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(testSessions).set({ lastSeenAt: new Date() }).where(eq(testSessions.id, sessionId));
+}
+
+export async function getMessageCountsForSessions() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({ sessionId: messages.sessionId, count: count() }).from(messages).groupBy(messages.sessionId);
 }
 
 // ============ MESSAGE HELPERS ============

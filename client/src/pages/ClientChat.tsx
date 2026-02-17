@@ -5,13 +5,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Label } from "@/components/ui/label";
 import {
   Send, ThumbsUp, ThumbsDown, Pencil, StickyNote, Star, Loader2, Bot, User,
-  CheckCircle2, Sparkles, Zap, Shield, Brain, Sun, Moon, Megaphone, Phone
+  CheckCircle2, Sparkles, Zap, Shield, Brain, Sun, Moon, Megaphone, Phone, RefreshCcw
 } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "wouter";
 import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 import { motion, AnimatePresence } from "framer-motion";
+import { LinkPreviews } from "@/components/LinkPreview";
 
 const LOGO_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663346430490/lltjiETQWNdEtrRM.svg";
 const WHATSAPP_LINK = "https://wa.me/201505354810";
@@ -234,11 +235,13 @@ export default function ClientChat() {
   const utils = trpc.useUtils();
 
   const getOrCreate = trpc.sessions.getOrCreate.useMutation();
+  const createNewSession = trpc.sessions.createNew.useMutation();
   const sendMessage = trpc.messages.send.useMutation();
   const submitFeedback = trpc.messages.feedback.useMutation();
   const editMessage = trpc.messages.edit.useMutation();
   const saveNote = trpc.notes.saveSessionNote.useMutation();
   const submitReview = trpc.reviews.submit.useMutation();
+  const heartbeat = trpc.sessions.heartbeat.useMutation();
 
   const [session, setSession] = useState<any>(null);
   const [bot, setBot] = useState<any>(null);
@@ -247,6 +250,7 @@ export default function ClientChat() {
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [initLoading, setInitLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chatTheme, setChatTheme] = useState<ChatTheme>(() => {
     return (localStorage.getItem("chat-theme") as ChatTheme) || "dark";
@@ -254,6 +258,16 @@ export default function ClientChat() {
 
   // Banners
   const [banners, setBanners] = useState<any[]>([]);
+
+  // Heartbeat: update lastSeenAt every 30s for presence tracking
+  useEffect(() => {
+    if (!session?.id || !token) return;
+    heartbeat.mutate({ sessionId: session.id, shareToken: token });
+    const interval = setInterval(() => {
+      heartbeat.mutate({ sessionId: session.id, shareToken: token });
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [session?.id, token]);
 
   // Modals
   const [feedbackModal, setFeedbackModal] = useState<{ messageId: number; type: "like" | "dislike" } | null>(null);
@@ -400,6 +414,31 @@ export default function ClientChat() {
       },
     });
   };
+
+  // ============ NEW SESSION (REFRESH) ============
+  const handleNewSession = useCallback(() => {
+    if (!token || isRefreshing || isLoading) return;
+    if (!confirm("هل تريد بدء محادثة جديدة؟ سيتم حفظ المحادثة الحالية.")) return;
+    setIsRefreshing(true);
+    createNewSession.mutate({ shareToken: token }, {
+      onSuccess: (data) => {
+        setSession(data.session);
+        setBot(data.bot);
+        setTester(data.tester);
+        setMessages([]);
+        setNotesContent("");
+        setReviewSubmitted(false);
+        setReviewRating(5);
+        setReviewComment("");
+        setIsRefreshing(false);
+        toast.success("تم بدء محادثة جديدة!");
+      },
+      onError: (err) => {
+        toast.error("فشل بدء محادثة جديدة");
+        setIsRefreshing(false);
+      },
+    });
+  }, [token, isRefreshing, isLoading]);
 
   // Theme-dependent classes
   const isDark = chatTheme === "dark";
@@ -552,6 +591,18 @@ export default function ClientChat() {
 
             {/* Action buttons */}
             <div className="flex items-center gap-2">
+              {/* New session / refresh */}
+              <button
+                onClick={handleNewSession}
+                disabled={isRefreshing || isLoading}
+                className={`group relative p-2 rounded-xl transition-all duration-300 ${isDark
+                  ? "bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] hover:border-cyan-500/20"
+                  : "bg-gray-100 hover:bg-gray-200 border border-gray-200 hover:border-blue-300"
+                  } disabled:opacity-40 disabled:cursor-not-allowed`}
+                title="بدء محادثة جديدة"
+              >
+                <RefreshCcw className={`h-4 w-4 transition-colors ${isRefreshing ? "animate-spin" : ""} ${isDark ? "text-white/40 group-hover:text-cyan-400" : "text-gray-400 group-hover:text-blue-500"}`} />
+              </button>
               {/* Theme toggle */}
               <button
                 onClick={toggleChatTheme}
@@ -691,6 +742,9 @@ export default function ClientChat() {
                         <Streamdown>{formatImageUrls(msg.content)}</Streamdown>
                       </div>
                     </div>
+
+                    {/* Link previews for bot messages */}
+                    {!isUser && <LinkPreviews text={msg.content} theme={chatTheme} />}
 
                     {/* Edited content */}
                     {msg.editedContent && (
