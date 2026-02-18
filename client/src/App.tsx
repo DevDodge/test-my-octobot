@@ -16,6 +16,7 @@ import BannersPage from "./pages/Banners";
 import ClientChat from "./pages/ClientChat";
 import LoginPage from "./pages/Login";
 import AdminManagementPage from "./pages/AdminManagement";
+import RecycleBinPage from "./pages/RecycleBin";
 
 function AdminRoutes() {
   return (
@@ -30,6 +31,7 @@ function AdminRoutes() {
         <Route path="/banners" component={BannersPage} />
         <Route path="/analytics" component={AnalyticsPage} />
         <Route path="/admins" component={AdminManagementPage} />
+        <Route path="/recycle-bin" component={RecycleBinPage} />
         <Route component={NotFound} />
       </Switch>
     </DashboardLayout>

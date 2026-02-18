@@ -213,6 +213,17 @@ export const appRouter = router({
       const bot = await db.getBotById(tester.botId);
       return { tester, bot };
     }),
+    listDeleted: adminProcedure.query(async () => {
+      return db.listDeletedTesters();
+    }),
+    restore: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      await db.restoreTester(input.id);
+      return { success: true };
+    }),
+    permanentDelete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      await db.permanentDeleteTester(input.id);
+      return { success: true };
+    }),
   }),
 
   // ============ TEST SESSIONS ============
@@ -326,29 +337,98 @@ export const appRouter = router({
         return md;
       }
 
-      // TXT format
-      let txt = `TEST SESSION REPORT\n${"=".repeat(50)}\n`;
+      // TXT format — rich box-drawing style
+      const LINE = "═".repeat(65);
+      const THIN = "─".repeat(65);
+      const BOX_TOP = "┌" + "─".repeat(65);
+      const BOX_MID = "├" + "─".repeat(65);
+      const BOX_BTM = "└" + "─".repeat(65);
+
+      const formatTime = (d: Date) => {
+        const date = new Date(d);
+        const h = date.getHours();
+        const m = date.getMinutes().toString().padStart(2, "0");
+        const ampm = h >= 12 ? "pm" : "am";
+        const h12 = h % 12 || 12;
+        return `${h12}:${m} ${ampm}`;
+      };
+      const formatDateLabel = (d: Date) => {
+        const date = new Date(d);
+        return date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+      };
+      const formatExportDate = (d: Date) => {
+        const date = new Date(d);
+        return date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) + ", " + formatTime(date);
+      };
+      const getDateKey = (d: Date) => {
+        const date = new Date(d);
+        return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+      };
+      const wrapLines = (text: string) => text.split("\n").map(l => `│ ${l}`).join("\n");
+
+      let txt = `${LINE}\n`;
+      txt += `                     OCTOBOT SESSION EXPORT\n`;
+      txt += `${LINE}\n\n`;
+      txt += `Session ID: ${session.sessionToken}\n`;
       txt += `Bot: ${bot?.name || "Unknown"}\n`;
       txt += `Client: ${bot?.clientName || "Unknown"}\n`;
-      txt += `Session ID: ${session.sessionToken}\n`;
       txt += `Status: ${session.status}\n`;
-      txt += `Created: ${session.createdAt}\n\n`;
-      txt += `CHAT HISTORY\n${"-".repeat(50)}\n\n`;
+      txt += `Export Date: ${formatExportDate(new Date())}\n`;
+      txt += `Total Messages: ${msgs.length}\n`;
+      txt += `\n${LINE}\n`;
+      txt += `                         MESSAGES\n`;
+      txt += `${LINE}\n\n`;
+
+      let lastDateKey = "";
       msgs.forEach(m => {
-        const role = m.role === "user" ? "CLIENT" : "BOT";
-        txt += `[${role}] (${m.createdAt})\n${m.content}\n`;
-        if (m.editedContent) txt += `  [EDITED] ${m.editedContent}\n`;
+        const dateKey = getDateKey(m.createdAt);
+        if (dateKey !== lastDateKey) {
+          txt += `\n───────────────── ${formatDateLabel(m.createdAt)} ─────────────────\n\n`;
+          lastDateKey = dateKey;
+        }
+        const emoji = m.role === "user" ? "👤 USER" : "🤖 BOT";
+        const time = formatTime(m.createdAt);
+        txt += `${BOX_TOP}\n`;
+        txt += `│ ${emoji}  [${time}]\n`;
+        txt += `${BOX_MID}\n`;
+        txt += wrapLines(m.content) + "\n";
+
+        if (m.editedContent) {
+          txt += `│\n│ ✏️ EDITED RESPONSE:\n`;
+          txt += wrapLines(m.editedContent) + "\n";
+        }
+
         const fb = feedbackMap.get(m.id);
-        if (fb) {
+        if (fb && fb.length > 0) {
+          txt += `│\n│ 💬 FEEDBACK COMMENTS (${fb.length}):\n`;
           fb.forEach(f => {
-            txt += `  [${f.feedbackType.toUpperCase()}] ${f.comment || "No comment"}\n`;
+            const icon = f.feedbackType === "like" ? "✅ POSITIVE" : "❌ NEGATIVE";
+            txt += `│   [${icon}] "${f.comment || "No comment"}"\n`;
           });
         }
-        txt += "\n";
+
+        txt += `${BOX_BTM}\n\n`;
       });
-      if (note) txt += `SESSION NOTES\n${"-".repeat(50)}\n${note.content}\n\n`;
-      if (session.adminNotes) txt += `ADMIN NOTES\n${"-".repeat(50)}\n${session.adminNotes}\n\n`;
-      if (session.reviewComment) txt += `REVIEW (Rating: ${session.reviewRating}/5)\n${"-".repeat(50)}\n${session.reviewComment}\n`;
+
+      if (note) {
+        txt += `${BOX_TOP}\n│ 📝 SESSION NOTES\n${BOX_MID}\n`;
+        txt += wrapLines(note.content) + "\n";
+        txt += `${BOX_BTM}\n\n`;
+      }
+      if (session.adminNotes) {
+        txt += `${BOX_TOP}\n│ 🔒 ADMIN NOTES\n${BOX_MID}\n`;
+        txt += wrapLines(session.adminNotes) + "\n";
+        txt += `${BOX_BTM}\n\n`;
+      }
+      if (session.reviewComment) {
+        txt += `${BOX_TOP}\n│ ⭐ REVIEW (Rating: ${session.reviewRating}/5)\n${BOX_MID}\n`;
+        txt += wrapLines(session.reviewComment) + "\n";
+        txt += `${BOX_BTM}\n\n`;
+      }
+
+      txt += `${LINE}\n`;
+      txt += `                      END OF EXPORT\n`;
+      txt += `${LINE}\n`;
       return txt;
     }),
   }),

@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Pencil, Trash2, Bot, ExternalLink, Copy, UserPlus, Link2, CheckCircle2, ClipboardList, Upload, Users, MessageCircle, RefreshCcw } from "lucide-react";
+import { Plus, Pencil, Trash2, Bot, ExternalLink, Copy, UserPlus, Link2, CheckCircle2, ClipboardList, Upload, Users, MessageCircle, RefreshCcw, AlertTriangle } from "lucide-react";
 import { useState, useRef, useCallback } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -52,6 +52,15 @@ export default function BotsPage() {
       toast.success("تم إنشاء المختبر! تم نسخ رابط الاختبار.");
     },
   });
+  const deleteTester = trpc.testers.delete.useMutation({
+    onSuccess: () => {
+      utils.testers.list.invalidate();
+      utils.sessions.list.invalidate();
+      utils.sessions.messageCounts.invalidate();
+      setDeleteTesterModal(null);
+      toast.success("تم حذف رابط الاختبار بنجاح");
+    },
+  });
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editBot, setEditBot] = useState<any>(null);
@@ -70,6 +79,7 @@ export default function BotsPage() {
   const [testerName, setTesterName] = useState("");
   const [testerEmail, setTesterEmail] = useState("");
   const [newTestLink, setNewTestLink] = useState<string | null>(null);
+  const [deleteTesterModal, setDeleteTesterModal] = useState<{ tester: any; sessions: any[]; totalMessages: number } | null>(null);
 
   // Post-creation link display
   const [createdBotLink, setCreatedBotLink] = useState<{ botId: number; botName: string } | null>(null);
@@ -397,8 +407,8 @@ export default function BotsPage() {
                                 <span className="text-xs text-foreground/80 truncate">{tester.name}</span>
                                 {testerSessions.length > 0 && (
                                   <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${isOnline
-                                      ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
-                                      : "bg-gray-100 text-gray-500 dark:bg-gray-500/15 dark:text-gray-400"
+                                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
+                                    : "bg-gray-100 text-gray-500 dark:bg-gray-500/15 dark:text-gray-400"
                                     }`}>
                                     {isOnline && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
                                     {hasRefreshSession ? <RefreshCcw className="h-2.5 w-2.5" /> : <MessageCircle className="h-2.5 w-2.5" />}
@@ -418,6 +428,11 @@ export default function BotsPage() {
                                   <a href={`/chat/${tester.shareToken}`} target="_blank" rel="noopener noreferrer">
                                     <ExternalLink className="h-3 w-3" />
                                   </a>
+                                </Button>
+                                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 rounded-md hover:bg-destructive/10 hover:text-destructive" onClick={() => {
+                                  setDeleteTesterModal({ tester, sessions: testerSessions, totalMessages: totalMsgCount });
+                                }} title="حذف الرابط">
+                                  <Trash2 className="h-3 w-3" />
                                 </Button>
                               </div>
                             </div>
@@ -510,6 +525,87 @@ export default function BotsPage() {
             ) : (
               <DialogClose asChild><Button>تم</Button></DialogClose>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Tester Confirmation Modal */}
+      <Dialog open={!!deleteTesterModal} onOpenChange={(o) => { if (!o) setDeleteTesterModal(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              تأكيد حذف رابط الاختبار
+            </DialogTitle>
+          </DialogHeader>
+          {deleteTesterModal && (
+            <div className="space-y-4" dir="rtl">
+              <p className="text-sm text-muted-foreground">
+                هل أنت متأكد من حذف رابط الاختبار هذا؟ سيتم حذف جميع البيانات المرتبطة به.
+              </p>
+              <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">الاسم</span>
+                  <span className="text-sm font-medium">{deleteTesterModal.tester.name}</span>
+                </div>
+                {deleteTesterModal.tester.email && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">البريد الإلكتروني</span>
+                    <span className="text-sm font-medium" dir="ltr">{deleteTesterModal.tester.email}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">البوت</span>
+                  <span className="text-sm font-medium">{bots?.find(b => b.id === deleteTesterModal.tester.botId)?.name || "غير معروف"}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">رابط المشاركة</span>
+                  <code className="text-[10px] bg-background px-2 py-1 rounded border max-w-[180px] truncate" dir="ltr">
+                    /chat/{deleteTesterModal.tester.shareToken}
+                  </code>
+                </div>
+                <div className="border-t border-border my-2" />
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">عدد الجلسات</span>
+                  <Badge variant="secondary">{deleteTesterModal.sessions.length}</Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">إجمالي الرسائل</span>
+                  <Badge variant="secondary">{deleteTesterModal.totalMessages}</Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">تاريخ الإنشاء</span>
+                  <span className="text-xs text-muted-foreground" dir="ltr">
+                    {new Date(deleteTesterModal.tester.createdAt).toLocaleDateString("ar-EG", { year: "numeric", month: "long", day: "numeric" })}
+                  </span>
+                </div>
+              </div>
+              {deleteTesterModal.sessions.length > 0 && (
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-500/10 dark:border-amber-500/20">
+                  <p className="text-xs text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    تحذير: يوجد {deleteTesterModal.sessions.length} جلسة و {deleteTesterModal.totalMessages} رسالة مرتبطة بهذا الرابط.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <DialogClose asChild>
+              <Button variant="outline">إلغاء</Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (deleteTesterModal) {
+                  deleteTester.mutate({ id: deleteTesterModal.tester.id });
+                }
+              }}
+              disabled={deleteTester.isPending}
+            >
+              <Trash2 className="h-4 w-4 ml-1" />
+              {deleteTester.isPending ? "جاري الحذف..." : "حذف نهائي"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -271,8 +271,8 @@ export async function createClientTester(data: { name: string; email?: string; b
 export async function listClientTesters(botId?: number) {
   const db = await getDb();
   if (!db) return [];
-  if (botId) return db.select().from(clientTesters).where(eq(clientTesters.botId, botId)).orderBy(desc(clientTesters.createdAt));
-  return db.select().from(clientTesters).orderBy(desc(clientTesters.createdAt));
+  if (botId) return db.select().from(clientTesters).where(and(eq(clientTesters.botId, botId), isNull(clientTesters.deletedAt))).orderBy(desc(clientTesters.createdAt));
+  return db.select().from(clientTesters).where(isNull(clientTesters.deletedAt)).orderBy(desc(clientTesters.createdAt));
 }
 
 export async function getClientTesterByToken(shareToken: string) {
@@ -283,6 +283,38 @@ export async function getClientTesterByToken(shareToken: string) {
 }
 
 export async function deleteClientTester(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(clientTesters).set({ deletedAt: new Date() }).where(eq(clientTesters.id, id));
+}
+
+export async function listDeletedTesters() {
+  const db = await getDb();
+  if (!db) return [];
+  const result = await db.select({
+    id: clientTesters.id,
+    name: clientTesters.name,
+    email: clientTesters.email,
+    botId: clientTesters.botId,
+    shareToken: clientTesters.shareToken,
+    createdAt: clientTesters.createdAt,
+    deletedAt: clientTesters.deletedAt,
+    botName: bots.name,
+    clientName: bots.clientName,
+  }).from(clientTesters)
+    .leftJoin(bots, eq(clientTesters.botId, bots.id))
+    .where(sql`${clientTesters.deletedAt} IS NOT NULL`)
+    .orderBy(desc(clientTesters.deletedAt));
+  return result;
+}
+
+export async function restoreTester(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(clientTesters).set({ deletedAt: null }).where(eq(clientTesters.id, id));
+}
+
+export async function permanentDeleteTester(id: number) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   await db.delete(clientTesters).where(eq(clientTesters.id, id));
