@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Streamdown } from "streamdown";
 import { motion, AnimatePresence } from "framer-motion";
 import { LinkPreviews } from "@/components/LinkPreview";
+import { VoiceNotePlayer, parseMessageContent } from "@/components/VoiceNotePlayer";
 
 const LOGO_URL = "https://files.manuscdn.com/user_upload_by_module/session_file/310519663346430490/lltjiETQWNdEtrRM.svg";
 const WHATSAPP_LINK = "https://wa.me/201505354810";
@@ -684,7 +685,13 @@ export default function ClientChat() {
                   : "bg-white border border-gray-200 shadow-md"
                   }`}>
                   <div className={`text-sm leading-relaxed ${isDark ? "text-white/80 prose-invert" : "text-gray-700"}`}>
-                    <Streamdown>{formatImageUrls(bot.firstMessage)}</Streamdown>
+                    {parseMessageContent(bot.firstMessage).map((seg, si) =>
+                      seg.type === "voice" ? (
+                        <VoiceNotePlayer key={si} url={seg.content} theme={chatTheme} />
+                      ) : (
+                        <Streamdown key={si}>{formatImageUrls(seg.content)}</Streamdown>
+                      )
+                    )}
                   </div>
                 </div>
               </div>
@@ -739,7 +746,17 @@ export default function ClientChat() {
                         }`}
                     >
                       <div className={`text-sm leading-relaxed ${!isUser && isDark ? "prose-invert" : ""}`}>
-                        <Streamdown>{formatImageUrls(msg.content)}</Streamdown>
+                        {!isUser ? (
+                          parseMessageContent(msg.content).map((seg, si) =>
+                            seg.type === "voice" ? (
+                              <VoiceNotePlayer key={si} url={seg.content} theme={chatTheme} />
+                            ) : (
+                              <Streamdown key={si}>{formatImageUrls(seg.content)}</Streamdown>
+                            )
+                          )
+                        ) : (
+                          <Streamdown>{formatImageUrls(msg.content)}</Streamdown>
+                        )}
                       </div>
                     </div>
 
@@ -761,7 +778,13 @@ export default function ClientChat() {
                           <span className={`text-[10px] font-medium ${isDark ? "text-amber-400/70" : "text-amber-600"}`}>تم التعديل</span>
                         </div>
                         <div className={`text-xs leading-relaxed ${isDark ? "text-white/60" : "text-gray-600"}`}>
-                          <Streamdown>{formatImageUrls(msg.editedContent)}</Streamdown>
+                          {parseMessageContent(msg.editedContent).map((seg, si) =>
+                            seg.type === "voice" ? (
+                              <VoiceNotePlayer key={si} url={seg.content} theme={chatTheme} />
+                            ) : (
+                              <Streamdown key={si}>{formatImageUrls(seg.content)}</Streamdown>
+                            )
+                          )}
                         </div>
                       </motion.div>
                     )}

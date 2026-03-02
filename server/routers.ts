@@ -337,12 +337,21 @@ export const appRouter = router({
         return md;
       }
 
-      // TXT format — rich box-drawing style
+      // TXT format — rich box-drawing style matching OCTOBOT CHAT EXPORT format
       const LINE = "═".repeat(65);
-      const THIN = "─".repeat(65);
       const BOX_TOP = "┌" + "─".repeat(65);
       const BOX_MID = "├" + "─".repeat(65);
       const BOX_BTM = "└" + "─".repeat(65);
+
+      const ordinalSuffix = (day: number) => {
+        if (day >= 11 && day <= 13) return "th";
+        switch (day % 10) {
+          case 1: return "st";
+          case 2: return "nd";
+          case 3: return "rd";
+          default: return "th";
+        }
+      };
 
       const formatTime = (d: Date) => {
         const date = new Date(d);
@@ -352,14 +361,28 @@ export const appRouter = router({
         const h12 = h % 12 || 12;
         return `${h12}:${m} ${ampm}`;
       };
+
+      const formatTimeWithSeconds = (d: Date) => {
+        const date = new Date(d);
+        const h = date.getHours();
+        const m = date.getMinutes().toString().padStart(2, "0");
+        const s = date.getSeconds().toString().padStart(2, "0");
+        const ampm = h >= 12 ? "pm" : "am";
+        const h12 = h % 12 || 12;
+        return `${h12}:${m}:${s} ${ampm}`;
+      };
+
       const formatDateLabel = (d: Date) => {
         const date = new Date(d);
-        return date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+        const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const day = date.getDate();
+        return `${months[date.getMonth()]} ${day}${ordinalSuffix(day)} ${date.getFullYear()}`;
       };
+
       const formatExportDate = (d: Date) => {
-        const date = new Date(d);
-        return date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) + ", " + formatTime(date);
+        return `${formatDateLabel(d)}, ${formatTimeWithSeconds(d)}`;
       };
+
       const getDateKey = (d: Date) => {
         const date = new Date(d);
         return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
@@ -367,14 +390,13 @@ export const appRouter = router({
       const wrapLines = (text: string) => text.split("\n").map(l => `│ ${l}`).join("\n");
 
       let txt = `${LINE}\n`;
-      txt += `                     OCTOBOT SESSION EXPORT\n`;
+      txt += `                     OCTOBOT CHAT EXPORT\n`;
       txt += `${LINE}\n\n`;
       txt += `Session ID: ${session.sessionToken}\n`;
-      txt += `Bot: ${bot?.name || "Unknown"}\n`;
-      txt += `Client: ${bot?.clientName || "Unknown"}\n`;
-      txt += `Status: ${session.status}\n`;
+      txt += `Source: ${bot?.clientName || "API/Embed"}\n`;
       txt += `Export Date: ${formatExportDate(new Date())}\n`;
       txt += `Total Messages: ${msgs.length}\n`;
+      txt += `Memory Type: Buffer Memory\n`;
       txt += `\n${LINE}\n`;
       txt += `                         MESSAGES\n`;
       txt += `${LINE}\n\n`;
@@ -396,6 +418,27 @@ export const appRouter = router({
         if (m.editedContent) {
           txt += `│\n│ ✏️ EDITED RESPONSE:\n`;
           txt += wrapLines(m.editedContent) + "\n";
+        }
+
+        // Tool usage section for bot messages
+        if (m.role === "bot") {
+          // Try to detect tool usage from content - tools appear as JSON objects like {"toolName": ...}
+          const toolMatches = m.content.match(/\{[^{}]*"(?:START|toolName|action)"[^{}]*\}/g);
+          if (toolMatches && toolMatches.length > 0) {
+            txt += `│\n│ 🔧 USED TOOLS (${toolMatches.length}):\n`;
+            toolMatches.forEach((toolJson, idx) => {
+              try {
+                const parsed = JSON.parse(toolJson);
+                const toolName = parsed.toolName || parsed.action || Object.keys(parsed)[0];
+                txt += `│   ┌── Tool ${idx + 1}: ${toolName}\n`;
+                txt += `│   │  📥 Input:\n`;
+                txt += `│   │     ${toolJson}\n`;
+                txt += `│   └──────────────────────────────────────────\n`;
+              } catch {
+                // Not valid JSON, skip
+              }
+            });
+          }
         }
 
         const fb = feedbackMap.get(m.id);

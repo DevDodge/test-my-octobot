@@ -27,7 +27,8 @@ export function extractUrls(text: string): string[] {
     if (!matches) return [];
     // Filter out image URLs (already handled by formatImageUrls) and deduplicate
     const filtered = matches.filter(url =>
-        !url.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp|tiff)$/i)
+        !url.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp|tiff)$/i) &&
+        !url.match(/drive\.google\.com\/file\/d\//i)
     );
     return Array.from(new Set(filtered));
 }

@@ -50,7 +50,7 @@ export default function SessionDetailPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `session-${session.sessionToken}.${format}`;
+      a.download = `chat-export-${session.sessionToken}.${format}`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success(`تم التصدير بصيغة ${format.toUpperCase()}`);
