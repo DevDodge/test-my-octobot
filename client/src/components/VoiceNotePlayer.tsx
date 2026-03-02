@@ -1,14 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Play, Pause } from "lucide-react";
+import { Play, Pause, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 type ChatTheme = "dark" | "light";
 
-/** Convert Google Drive view URL to a direct download/stream URL */
+/** Convert Google Drive view URL to a proxied stream URL via our server */
 function getStreamUrl(driveUrl: string): string {
     const match = driveUrl.match(/\/file\/d\/([^/\s]+)\//);
     if (!match) return driveUrl;
-    return `https://drive.google.com/uc?export=download&id=${match[1]}`;
+    return `/api/audio-proxy?id=${match[1]}`;
 }
 
 /** Format seconds to mm:ss */
@@ -26,6 +26,7 @@ export function VoiceNotePlayer({ url, theme }: { url: string; theme: ChatTheme 
     const isDark = theme === "dark";
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [isLoadingAudio, setIsLoadingAudio] = useState(false);
     const [duration, setDuration] = useState(0);
     const [currentTime, setCurrentTime] = useState(0);
     const [isLoaded, setIsLoaded] = useState(false);
@@ -34,39 +35,16 @@ export function VoiceNotePlayer({ url, theme }: { url: string; theme: ChatTheme 
 
     const streamUrl = getStreamUrl(url);
 
-    // Initialize audio element
+    // Cleanup on unmount
     useEffect(() => {
-        const audio = new Audio();
-        audio.crossOrigin = "anonymous";
-        audio.preload = "metadata";
-        audio.src = streamUrl;
-        audioRef.current = audio;
-
-        const onLoaded = () => {
-            setDuration(audio.duration);
-            setIsLoaded(true);
-        };
-        const onEnded = () => {
-            setIsPlaying(false);
-            setCurrentTime(0);
-        };
-        const onError = () => {
-            setError(true);
-        };
-
-        audio.addEventListener("loadedmetadata", onLoaded);
-        audio.addEventListener("ended", onEnded);
-        audio.addEventListener("error", onError);
-
         return () => {
-            audio.removeEventListener("loadedmetadata", onLoaded);
-            audio.removeEventListener("ended", onEnded);
-            audio.removeEventListener("error", onError);
             cancelAnimationFrame(animFrameRef.current);
-            audio.pause();
-            audio.src = "";
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current.src = "";
+            }
         };
-    }, [streamUrl]);
+    }, []);
 
     // Animation frame for progress update
     const updateProgress = useCallback(() => {
@@ -85,18 +63,57 @@ export function VoiceNotePlayer({ url, theme }: { url: string; theme: ChatTheme 
         return () => cancelAnimationFrame(animFrameRef.current);
     }, [isPlaying, updateProgress]);
 
+    const initAudio = (): Promise<HTMLAudioElement> => {
+        return new Promise((resolve, reject) => {
+            if (audioRef.current && isLoaded) {
+                resolve(audioRef.current);
+                return;
+            }
+            const audio = audioRef.current || new Audio();
+            audioRef.current = audio;
+
+            const onLoaded = () => {
+                setDuration(audio.duration);
+                setIsLoaded(true);
+                audio.removeEventListener("loadedmetadata", onLoaded);
+                audio.removeEventListener("error", onErr);
+                resolve(audio);
+            };
+            const onErr = () => {
+                audio.removeEventListener("loadedmetadata", onLoaded);
+                audio.removeEventListener("error", onErr);
+                reject(new Error("Failed to load audio"));
+            };
+            const onEnded = () => {
+                setIsPlaying(false);
+                setCurrentTime(0);
+            };
+
+            audio.addEventListener("loadedmetadata", onLoaded);
+            audio.addEventListener("error", onErr);
+            audio.addEventListener("ended", onEnded);
+            audio.src = streamUrl;
+            audio.load();
+        });
+    };
+
     const togglePlay = async () => {
-        if (!audioRef.current) return;
-        if (isPlaying) {
+        if (isPlaying && audioRef.current) {
             audioRef.current.pause();
             setIsPlaying(false);
-        } else {
-            try {
-                await audioRef.current.play();
-                setIsPlaying(true);
-            } catch {
-                setError(true);
-            }
+            return;
+        }
+
+        setIsLoadingAudio(true);
+        setError(false);
+        try {
+            const audio = await initAudio();
+            await audio.play();
+            setIsPlaying(true);
+        } catch {
+            setError(true);
+        } finally {
+            setIsLoadingAudio(false);
         }
     };
 
@@ -113,23 +130,6 @@ export function VoiceNotePlayer({ url, theme }: { url: string; theme: ChatTheme 
 
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-    if (error) {
-        return (
-            <a
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs transition-all ${isDark
-                    ? "bg-white/[0.04] border border-white/[0.08] text-cyan-300/70 hover:bg-white/[0.08]"
-                    : "bg-gray-50 border border-gray-200 text-blue-500 hover:bg-gray-100"
-                    }`}
-            >
-                <Play className="h-3.5 w-3.5" />
-                <span>🎵 رسالة صوتية (اضغط للاستماع)</span>
-            </a>
-        );
-    }
-
     return (
         <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -138,20 +138,22 @@ export function VoiceNotePlayer({ url, theme }: { url: string; theme: ChatTheme 
             className={`flex items-center gap-3 rounded-2xl px-3 py-2.5 min-w-[240px] max-w-[320px] select-none ${isDark
                 ? "bg-gradient-to-l from-cyan-500/[0.08] to-blue-600/[0.08] border border-cyan-500/15"
                 : "bg-gradient-to-l from-blue-50 to-indigo-50 border border-blue-200/60"
-                }`}
+                }${error ? ` ${isDark ? "border-red-500/20" : "border-red-200"}` : ""}`}
         >
             {/* Play/Pause button */}
             <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.9 }}
                 onClick={togglePlay}
-                disabled={!isLoaded && !error}
+                disabled={isLoadingAudio}
                 className={`h-10 w-10 rounded-full flex items-center justify-center shrink-0 transition-all duration-200 ${isDark
                     ? "bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/20 hover:shadow-cyan-500/30"
                     : "bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30"
-                    } disabled:opacity-40 disabled:cursor-wait`}
+                    } disabled:opacity-60 disabled:cursor-wait`}
             >
-                {isPlaying ? (
+                {isLoadingAudio ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                ) : isPlaying ? (
                     <Pause className="h-4 w-4" />
                 ) : (
                     <Play className="h-4 w-4 ml-0.5" />

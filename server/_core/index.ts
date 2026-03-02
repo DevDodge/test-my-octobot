@@ -67,6 +67,36 @@ async function startServer() {
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
   app.use("/uploads", express.static(uploadsDir));
 
+  // Audio proxy for Google Drive files (bypass CORS)
+  app.get("/api/audio-proxy", async (req, res) => {
+    const fileId = req.query.id as string;
+    if (!fileId) {
+      res.status(400).json({ error: "Missing file id" });
+      return;
+    }
+    try {
+      const driveUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+      const response = await (await import("axios")).default.get(driveUrl, {
+        responseType: "stream",
+        maxRedirects: 10,
+        timeout: 30000,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+      });
+      const contentType = response.headers["content-type"] || "audio/mpeg";
+      const contentLength = response.headers["content-length"];
+      res.setHeader("Content-Type", contentType);
+      if (contentLength) res.setHeader("Content-Length", contentLength);
+      res.setHeader("Accept-Ranges", "bytes");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      response.data.pipe(res);
+    } catch (err: any) {
+      console.error("[audio-proxy] Error:", err.message);
+      res.status(502).json({ error: "Failed to fetch audio" });
+    }
+  });
+
   // Auth routes (login endpoint)
   registerOAuthRoutes(app);
   // tRPC API
