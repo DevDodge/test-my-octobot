@@ -103,6 +103,17 @@ export const appRouter = router({
     analytics: adminProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
       return db.getBotAnalytics(input.id);
     }),
+    listDeleted: adminProcedure.query(async () => {
+      return db.listDeletedBots();
+    }),
+    restore: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      await db.restoreBot(input.id);
+      return { success: true };
+    }),
+    permanentDelete: adminProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+      await db.permanentDeleteBot(input.id);
+      return { success: true };
+    }),
   }),
 
   // ============ IMAGE UPLOAD ============

@@ -37,6 +37,7 @@ export const bots = pgTable("bots", {
   createdById: integer("createdById").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+  deletedAt: timestamp("deletedAt"),
 });
 
 export type Bot = typeof bots.$inferSelect;

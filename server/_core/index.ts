@@ -49,6 +49,18 @@ async function runMigration() {
       console.warn("[Migration] Warning:", error.message);
     }
   }
+  try {
+    // Add deletedAt column to bots for soft-delete support
+    await db.execute({
+      sql: `ALTER TABLE "bots" ADD COLUMN IF NOT EXISTS "deletedAt" timestamp`,
+      params: [],
+    } as any);
+    console.log("[Migration] Bots deletedAt column ensured");
+  } catch (error: any) {
+    if (!error.message?.includes("already exists")) {
+      console.warn("[Migration] Warning:", error.message);
+    }
+  }
 }
 
 async function startServer() {

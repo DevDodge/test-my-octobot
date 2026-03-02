@@ -155,7 +155,7 @@ export async function createBot(data: { name: string; clientName: string; brandL
 export async function listBots() {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(bots).orderBy(desc(bots.createdAt));
+  return db.select().from(bots).where(isNull(bots.deletedAt)).orderBy(desc(bots.createdAt));
 }
 
 export async function getBotById(id: number) {
@@ -174,6 +174,36 @@ export async function updateBot(id: number, data: Partial<{ name: string; client
 export async function deleteBot(id: number) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
+  await db.update(bots).set({ deletedAt: new Date() }).where(eq(bots.id, id));
+}
+
+export async function listDeletedBots() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(bots)
+    .where(sql`${bots.deletedAt} IS NOT NULL`)
+    .orderBy(desc(bots.deletedAt));
+}
+
+export async function restoreBot(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(bots).set({ deletedAt: null }).where(eq(bots.id, id));
+}
+
+export async function permanentDeleteBot(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  // Delete related data first
+  const sessions = await db.select({ id: testSessions.id }).from(testSessions).where(eq(testSessions.botId, id));
+  for (const session of sessions) {
+    await db.delete(messageFeedback).where(eq(messageFeedback.sessionId, session.id));
+    await db.delete(messages).where(eq(messages.sessionId, session.id));
+    await db.delete(sessionNotes).where(eq(sessionNotes.sessionId, session.id));
+  }
+  await db.delete(testSessions).where(eq(testSessions.botId, id));
+  await db.delete(clientTesters).where(eq(clientTesters.botId, id));
+  await db.delete(banners).where(eq(banners.botId, id));
   await db.delete(bots).where(eq(bots.id, id));
 }
 
